@@ -17,9 +17,9 @@ def get_requirements(file_path):
 
 
 if __name__ == "__main__":
-    MODULE_NAME = "todus"
+    MODULE_NAME = "todus3"
     DESC = "ToDus client"
-    URL = "https://github.com/adbenitez/todus"
+    URL = "https://github.com/oleksis/todus/tree/todus3"
     version = ""
 
     with open(os.path.join(MODULE_NAME, "__init__.py")) as fh:
@@ -42,8 +42,10 @@ if __name__ == "__main__":
         long_description_content_type="text/x-rst",
         author="adbenitez",
         author_email="adbenitez@nauta.cu",
+        maintainer="Oleksis Fraga",
+        maintainer_email="oleksis.fraga@gmail.com",
         url=URL,
-        keywords="todus",
+        keywords="todus,s3,client",
         license="MPL",
         classifiers=[
             "Development Status :: 4 - Beta",
@@ -61,5 +63,5 @@ if __name__ == "__main__":
             "dev": dev_deps,
         },
         python_requires=">=3.6.0",
-        entry_points={"console_scripts": ["todus = todus.main:main"]},
+        entry_points={"console_scripts": [f"{MODULE_NAME} = {MODULE_NAME}.main:main"]},
     )
