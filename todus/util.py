@@ -17,6 +17,7 @@ class ResultProcess(multiprocessing.Process):
 
     def _wrapper(self, *args, **kwargs) -> None:
         try:
+            # print(args, kwargs)
             self._result_queue.put(self._real_target(*args, **kwargs))
         except BaseException as ex:
             self._failed.set()

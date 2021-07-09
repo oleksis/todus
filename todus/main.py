@@ -1,7 +1,9 @@
 import argparse
+import configparser
 import logging
 import os
 import time
+from pathlib import Path
 from tempfile import TemporaryDirectory
 from urllib.parse import quote_plus, unquote_plus
 
@@ -14,7 +16,13 @@ from .client import ToDusClient
 logging.basicConfig(format="%(levelname)s - %(message)s", level=logging.INFO)
 
 
-def split_upload(phone: str, password: str, path: str, part_size: int) -> str:
+client = ToDusClient()
+config = configparser.ConfigParser()
+
+
+def split_upload(token: str, path: str, part_size: int) -> str:
+    global client
+
     with open(path, "rb") as file:
         data = file.read()
     filename = os.path.basename(path)
@@ -29,29 +37,29 @@ def split_upload(phone: str, password: str, path: str, part_size: int) -> str:
         del data
         parts = sorted(os.listdir(tempdir))
         parts_count = len(parts)
+
         urls = []
-        client = ToDusClient()
+
         for i, name in enumerate(parts, 1):
             logging.info(f"Uploading {i}/{parts_count}: {filename}")
             with open(os.path.join(tempdir, name), "rb") as file:
                 part = file.read()
             try:
-                token = client.login(phone, password)
                 urls.append(client.upload_file(token, part, len(part)))
             except Exception as ex:
                 logging.exception(ex)
                 time.sleep(15)
                 try:
-                    token = client.login(phone, password)
                     urls.append(client.upload_file(token, part, len(part)))
                 except Exception as ex:
                     logging.exception(ex)
                     raise ValueError(
                         f"Failed to upload part {i} ({len(part):,}B): {ex}"
                     )
+
         txt = "\n".join(f"{down_url}\t{name}" for down_url, name in zip(urls, parts))
         path = os.path.abspath(filename + ".txt")
-        with open(path, "w") as f:
+        with open(path, "w", encoding="utf-8") as f:
             f.write(txt)
         return path
 
@@ -74,7 +82,7 @@ def get_parser() -> argparse.ArgumentParser:
         "--config-folder",
         dest="folder",
         type=str,
-        default="",
+        default=".",
         help="folder where account configuration will be saved/loaded",
     )
     parser.add_argument(
@@ -115,43 +123,49 @@ def register(client: ToDusClient, phone: str) -> str:
 
 
 def get_password(phone: str, folder: str) -> str:
-    path = os.path.join(folder, phone + ".cfg")
-    if os.path.exists(path):
-        with open(path) as file:
-            return file.read().split("=", maxsplit=1)[-1].strip()
-    return ""
+    config_path = Path(folder) / Path(f"{phone}.ini")
+    config.read(config_path)
+    return config["DEFAULT"].get("password", "") if "DEFAULT" in config else ""
 
 
-def set_password(phone: str, password: str, folder: str) -> None:
-    with open(os.path.join(folder, phone + ".cfg"), "w") as file:
-        file.write("password=" + password)
+def save_config(phone: str, folder: str = ".") -> None:
+    with open(Path(folder) / Path(f"{phone}.ini"), "w") as configfile:
+        config.write(configfile)
 
 
 def main() -> None:
+    global client
+
     parser = get_parser()
     args = parser.parse_args()
-    client = ToDusClient()
-    password = get_password(args.number, args.folder)
-    if not password and args.command != "loging":
+    phone = args.number
+    password = get_password(phone, args.folder) or "***FIX_TEMP***"
+
+    if not password and args.command != "login":
         print("ERROR: account not authenticated, login first.")
         return
+
     if args.command == "upload":
+        # token = client.login(phone, password)
+        token = config["DEFAULT"].get("token", "") if "DEFAULT" in config else ""
+        logging.debug(f"Token: '{token}'")
+
         for path in args.file:
             logging.info(f"Uploading: {path}")
             if args.part_size:
-                txt = split_upload(args.number, password, path, args.part_size)
+                txt = split_upload(token, path, args.part_size)
                 logging.info(f"TXT: {txt}")
             else:
                 with open(path, "rb") as file:
                     data = file.read()
-                token = client.login(args.number, password)
-                logging.debug(f"Token: '{token}'")
                 url = client.upload_file(token, data, len(data))
                 url += f"?name={quote_plus(os.path.basename(path))}"
                 logging.info(f"URL: {url}")
     elif args.command == "download":
-        token = client.login(args.number, password)
+        # token = client.login(phone, password)
+        token = config["DEFAULT"].get("token", "") if "DEFAULT" in config else ""
         logging.debug(f"Token: '{token}'")
+
         while args.url:
             url = args.url.pop(0)
             if os.path.exists(url):
@@ -161,6 +175,7 @@ def main() -> None:
                         line = line.strip()
                         if line:
                             urls.append("{}?name={}".format(*line.split(maxsplit=1)))
+
                     args.url = urls + args.url
                     continue
             logging.info(
@@ -171,12 +186,20 @@ def main() -> None:
             try:
                 size = client.download_file(token, url, name)
             except Exception:
-                token = client.login(args.number, password)
                 size = client.download_file(token, url, name)
             logging.debug(
                 f"File Size: {size // 1024}",
             )
     elif args.command == "login":
-        set_password(args.number, register(client, args.number), args.folder)
+        # TODO: Fix Register
+        # password = register(client, phone)
+        # token = client.login(phone, password)
+
+        token = config["DEFAULT"].get("token", "") if "DEFAULT" in config else ""
+        logging.debug(f"Token: '{token}'")
+
+        config["DEFAULT"]["password"] = password
+        config["DEFAULT"]["token"] = token
+        save_config(phone, args.folder)
     else:
         parser.print_usage()

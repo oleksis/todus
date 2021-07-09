@@ -3,6 +3,11 @@ __pycache__
 *.pyc
 *.mo
 
+*.7z*
+*.zip*
+*.txt
+*.ini
+
 # TODO: Add tests
 tests/
 

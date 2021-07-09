@@ -3,6 +3,7 @@ import re
 import socket
 import ssl
 from base64 import b64decode, b64encode
+from typing import Tuple
 
 from .errors import AuthenticationError
 from .util import generate_token
@@ -43,13 +44,13 @@ def _negociate_start(m: str, so: ssl.SSLSocket, authstr: bytes, sid: str) -> boo
     return False
 
 
-def _parse_token(token: str) -> tuple:
+def _parse_token(token: str) -> Tuple[str, bytes]:
     phone = json.loads(b64decode(token.split(".")[1]).decode())["username"]
     authstr = b64encode((chr(0) + phone + chr(0) + token).encode("utf-8"))
     return phone, authstr
 
 
-def reserve_url(token: str, filesize: int) -> tuple:
+def reserve_url(token: str, filesize: int) -> Tuple[str, str]:
     """Reserve file URL to upload.
 
     Returns a tuple with upload and download URLs.
@@ -81,9 +82,11 @@ def reserve_url(token: str, filesize: int) -> tuple:
             continue
 
         if m.startswith("<iq o='" + phone + "@im.todus.cu"):
+            up_url = down_url = ""
             match = re.match(r".*put='(.*)' get='(.*)' stat.*", m)
-            up_url = match.group(1).replace("amp;", "")
-            down_url = match.group(2)
+            if match:
+                up_url = match.group(1).replace("amp;", "")
+                down_url = match.group(2)
             return (up_url, down_url)
 
         if "<not-authorized/>" in m:
@@ -110,7 +113,11 @@ def get_real_url(token: str, url: str) -> str:
             continue
 
         if "t='result' i='{}-2'>".format(sid) in m and "status='200'" in m:
-            return re.match(".*du='(.*)' stat.*", m).group(1).replace("amp;", "")
+            down_url = ""
+            match = re.match(".*du='(.*)' stat.*", m)
+            if match:
+                down_url = match.group(1).replace("amp;", "")
+            return down_url
 
         if "<not-authorized/>" in m:
             raise AuthenticationError()
