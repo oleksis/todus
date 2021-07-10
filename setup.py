@@ -27,7 +27,7 @@ if __name__ == "__main__":
         if m:
             version = m.group(1)
 
-    with open("README.rst", encoding="utf-8") as fh:
+    with open("README.md", encoding="utf-8") as fh:
         long_description = fh.read()
 
     install_requires = get_requirements("requirements/requirements.txt")
@@ -39,7 +39,7 @@ if __name__ == "__main__":
         version=version,
         description=DESC,
         long_description=long_description,
-        long_description_content_type="text/x-rst",
+        long_description_content_type="text/markdown",
         author="adbenitez",
         author_email="adbenitez@nauta.cu",
         maintainer="Oleksis Fraga",
