@@ -1,20 +1,20 @@
 ToDus client
 ============
 
-.. image:: https://img.shields.io/pypi/v/todus.svg
-   :target: https://pypi.org/project/todus
+.. image:: https://img.shields.io/pypi/v/todus3.svg
+   :target: https://pypi.org/project/todus3
 
-.. image:: https://img.shields.io/pypi/pyversions/todus.svg
-   :target: https://pypi.org/project/todus
+.. image:: https://img.shields.io/pypi/pyversions/todus3.svg
+   :target: https://pypi.org/project/todus3
 
-.. image:: https://pepy.tech/badge/todus
-   :target: https://pepy.tech/project/todus
+.. image:: https://pepy.tech/badge/todus3
+   :target: https://pepy.tech/project/todus3
 
-.. image:: https://img.shields.io/pypi/l/todus.svg
-   :target: https://pypi.org/project/todus
+.. image:: https://img.shields.io/pypi/l/todus3.svg
+   :target: https://pypi.org/project/todus3
 
-.. image:: https://github.com/adbenitez/todus/actions/workflows/python-ci.yml/badge.svg
-   :target: https://github.com/adbenitez/todus/actions/workflows/python-ci.yml
+.. image:: https://github.com/oleksis/todus3/actions/workflows/python-ci.yml/badge.svg
+   :target: https://github.com/oleksis/todus3/actions/workflows/python-ci.yml
 
 .. image:: https://img.shields.io/badge/code%20style-black-000000.svg
    :target: https://github.com/psf/black
@@ -26,4 +26,20 @@ Install
 
 To install run::
 
-  pip install todus
+  pip install todus3
+
+
+Usage
+-----
+```bash
+todus -- help
+
+python -m todus -n 53123456 login
+
+echo "Update TOKEN in 53123456.ini"
+
+python -m todus -n 53123456 download file.txt
+```
+
+⚠️ Working downloads/uploads. ✅
+👷🏾‍♂️ TODO: Login/Register
