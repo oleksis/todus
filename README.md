@@ -1,45 +1,32 @@
-ToDus client
-============
+# ToDus client
 
-.. image:: https://img.shields.io/pypi/v/todus3.svg
-   :target: https://pypi.org/project/todus3
-
-.. image:: https://img.shields.io/pypi/pyversions/todus3.svg
-   :target: https://pypi.org/project/todus3
-
-.. image:: https://pepy.tech/badge/todus3
-   :target: https://pepy.tech/project/todus3
-
-.. image:: https://img.shields.io/pypi/l/todus3.svg
-   :target: https://pypi.org/project/todus3
-
-.. image:: https://github.com/oleksis/todus3/actions/workflows/python-ci.yml/badge.svg
-   :target: https://github.com/oleksis/todus3/actions/workflows/python-ci.yml
-
-.. image:: https://img.shields.io/badge/code%20style-black-000000.svg
-   :target: https://github.com/psf/black
+[![](https://img.shields.io/pypi/v/todus3.svg)](https://pypi.org/project/todus3)
+[![](https://img.shields.io/pypi/pyversions/todus3.svg)](
+https://pypi.org/project/todus3)
+[![](https://img.shields.io/pypi/l/todus3.svg)](https://pypi.org/project/todus3)
+[![CI](https://github.com/oleksis/todus/actions/workflows/python-ci.yml/badge.svg)](https://github.com/oleksis/todus/actions/workflows/python-ci.yml)
+[![](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
 Use the ToDus API in your Python projects.
 
-Install
--------
+## Install
 
 To install run::
-
-  pip install todus3
-
-
-Usage
------
 ```bash
-todus -- help
+  pip install todus3
+```
 
-python -m todus -n 53123456 login
+## Usage
+```bash
+todus3 -- help
+
+todus3 -n 53123456 login
 
 echo "Update TOKEN in 53123456.ini"
 
-python -m todus -n 53123456 download file.txt
+todus3 -n 53123456 download file.txt
 ```
 
 ⚠️ Working downloads/uploads. ✅
+
 👷🏾‍♂️ TODO: Login/Register
