@@ -50,23 +50,29 @@ def split_upload(token: str, path: str, part_size: int) -> str:
         urls = []
 
         for i, name in enumerate(parts, 1):
-            logging.info(f"Uploading {i}/{parts_count}: {filename}")
+            retry = 0
+            up_done = False
+            logging.info(f"Uploading {i}/{parts_count}: {filename}.7z.{i:04}")
             with open(os.path.join(tempdir, name), "rb") as file:
                 part = file.read()
-            try:
-                urls.append(client.upload_file(token, part, len(part)))
-            except Exception as ex:
-                logging.exception(ex)
-                time.sleep(15)
+
+            while not up_done and retry < 2:
                 try:
                     urls.append(client.upload_file(token, part, len(part)))
                 except Exception as ex:
-                    logging.exception(ex)
-                    raise ValueError(
-                        f"Failed to upload part {i} ({len(part):,}B): {ex}"
-                    )
+                    logging.warning(str(ex))
+                    retry += 1
+                    if retry == 2:
+                        raise ValueError(
+                            f"Failed to upload part {i} ({len(part):,}B): {ex}"
+                        )
+                    logging.info(f"Retrying: {retry + 1}...")
+                    time.sleep(15)
+                finally:
+                    up_done = True
+
         path = write_txt(filename, urls, parts)
-        return path
+    return path
 
 
 def get_parser() -> argparse.ArgumentParser:

@@ -22,12 +22,12 @@ if __name__ == "__main__":
     URL = "https://github.com/adbenitez/todus"
     version = ""
 
-    with open(os.path.join(MODULE_NAME, "__init__.py")) as fh:
+    with open(os.path.join(MODULE_NAME, "__init__.py"), encoding="utf-8") as fh:
         m = re.search(r"__version__ = \"(.*?)\"", fh.read(), re.M)
         if m:
             version = m.group(1)
 
-    with open("README.rst") as fh:
+    with open("README.md", encoding="utf-8") as fh:
         long_description = fh.read()
 
     install_requires = get_requirements("requirements/requirements.txt")
@@ -39,11 +39,13 @@ if __name__ == "__main__":
         version=version,
         description=DESC,
         long_description=long_description,
-        long_description_content_type="text/x-rst",
+        long_description_content_type="text/markdown",
         author="adbenitez",
         author_email="adbenitez@nauta.cu",
+        maintainer="Oleksis Fraga",
+        maintainer_email="oleksis.fraga@gmail.com",
         url=URL,
-        keywords="todus",
+        keywords="todus,s3,client",
         license="MPL",
         classifiers=[
             "Development Status :: 4 - Beta",
@@ -61,5 +63,5 @@ if __name__ == "__main__":
             "dev": dev_deps,
         },
         python_requires=">=3.6.0",
-        entry_points={"console_scripts": ["todus = todus.main:main"]},
+        entry_points={"console_scripts": [f"{MODULE_NAME} = {MODULE_NAME}.main:main"]},
     )
