@@ -2,7 +2,6 @@ name: CI
 
 on:
   push:
-    branches: [ todus3 ]
     tags:
       - 'v*'
   pull_request:

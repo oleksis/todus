@@ -22,12 +22,12 @@ if __name__ == "__main__":
     URL = "https://github.com/oleksis/todus/tree/todus3"
     version = ""
 
-    with open(os.path.join(MODULE_NAME, "__init__.py")) as fh:
+    with open(os.path.join(MODULE_NAME, "__init__.py"), encoding="utf-8") as fh:
         m = re.search(r"__version__ = \"(.*?)\"", fh.read(), re.M)
         if m:
             version = m.group(1)
 
-    with open("README.rst") as fh:
+    with open("README.rst", encoding="utf-8") as fh:
         long_description = fh.read()
 
     install_requires = get_requirements("requirements/requirements.txt")
