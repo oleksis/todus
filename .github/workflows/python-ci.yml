@@ -90,3 +90,4 @@ jobs:
       with:
         user: __token__
         password: ${{ secrets.PYPI_PASSWORD }}
+        verify_metadata: false
