@@ -5,6 +5,7 @@ import os
 import time
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from typing import List
 from urllib.parse import quote_plus, unquote_plus
 
 import multivolumefile
@@ -18,6 +19,14 @@ logging.basicConfig(format="%(levelname)s - %(message)s", level=logging.INFO)
 
 client = ToDusClient()
 config = configparser.ConfigParser()
+
+
+def write_txt(filename: str, urls: List[str], parts: List[str]) -> str:
+    txt = "\n".join(f"{down_url}\t{name}" for down_url, name in zip(urls, parts))
+    path = Path(f"{filename}.txt").resolve()
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(txt)
+    return str(path)
 
 
 def split_upload(token: str, path: str, part_size: int) -> str:
@@ -56,11 +65,7 @@ def split_upload(token: str, path: str, part_size: int) -> str:
                     raise ValueError(
                         f"Failed to upload part {i} ({len(part):,}B): {ex}"
                     )
-
-        txt = "\n".join(f"{down_url}\t{name}" for down_url, name in zip(urls, parts))
-        path = os.path.abspath(filename + ".txt")
-        with open(path, "w", encoding="utf-8") as f:
-            f.write(txt)
+        path = write_txt(filename, urls, parts)
         return path
 
 
@@ -151,7 +156,8 @@ def main() -> None:
         logging.debug(f"Token: '{token}'")
 
         for path in args.file:
-            logging.info(f"Uploading: {path}")
+            filename = os.path.basename(path)
+            logging.info(f"Uploading: {filename}")
             if args.part_size:
                 txt = split_upload(token, path, args.part_size)
                 logging.info(f"TXT: {txt}")
@@ -159,8 +165,10 @@ def main() -> None:
                 with open(path, "rb") as file:
                     data = file.read()
                 url = client.upload_file(token, data, len(data))
-                url += f"?name={quote_plus(os.path.basename(path))}"
-                logging.info(f"URL: {url}")
+                down_url = f"{url}?name={quote_plus(filename)}"
+                logging.info(f"URL: {down_url}")
+                txt = write_txt(filename, urls=[url], parts=[filename])
+                logging.info(f"TXT: {txt}")
     elif args.command == "download":
         # token = client.login(phone, password)
         token = config["DEFAULT"].get("token", "") if "DEFAULT" in config else ""
