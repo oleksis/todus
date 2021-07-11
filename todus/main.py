@@ -66,9 +66,9 @@ def split_upload(token: str, path: str, part_size: int) -> str:
                         raise ValueError(
                             f"Failed to upload part {i} ({len(part):,}B): {ex}"
                         )
-                    logging.info(f"Retrying: {retry + 1}...")
+                    logging.info(f"Retrying: {retry}...")
                     time.sleep(15)
-                finally:
+                else:
                     up_done = True
 
         path = write_txt(filename, urls, parts)
@@ -170,10 +170,10 @@ def main() -> None:
             else:
                 with open(path, "rb") as file:
                     data = file.read()
-                url = client.upload_file(token, data, len(data))
-                down_url = f"{url}?name={quote_plus(filename)}"
+                file_uri = client.upload_file(token, data, len(data))
+                down_url = f"{file_uri}?name={quote_plus(filename)}"
                 logging.info(f"URL: {down_url}")
-                txt = write_txt(filename, urls=[url], parts=[filename])
+                txt = write_txt(filename, urls=[file_uri], parts=[filename])
                 logging.info(f"TXT: {txt}")
     elif args.command == "download":
         # token = client.login(phone, password)
@@ -181,26 +181,40 @@ def main() -> None:
         logging.debug(f"Token: '{token}'")
 
         while args.url:
-            url = args.url.pop(0)
-            if os.path.exists(url):
-                with open(url) as fp:
+            retry = 0
+            down_done = False
+            file_uri = args.url.pop(0)
+
+            if os.path.exists(file_uri):
+                with open(file_uri) as fp:
                     urls = []
                     for line in fp.readlines():
                         line = line.strip()
                         if line:
-                            urls.append("{}?name={}".format(*line.split(maxsplit=1)))
+                            _url, _filename = line.split(maxsplit=1)
+                            urls.append(f"{_url}?name={_filename}")
 
                     args.url = urls + args.url
                     continue
+
             logging.info(
-                f"Downloading: {url}",
+                f"Downloading: {file_uri}",
             )
-            url, name = url.split("?name=", maxsplit=1)
+            file_uri, name = file_uri.split("?name=", maxsplit=1)
             name = unquote_plus(name)
-            try:
-                size = client.download_file(token, url, name)
-            except Exception:
-                size = client.download_file(token, url, name)
+            size = 0
+
+            while not down_done and retry < 2:
+                try:
+                    size = client.download_file(token, file_uri, name)
+                except Exception as ex:
+                    logging.warning(str(ex))
+                    retry += 1
+                    if retry == 2:
+                        logging.exception(ex)
+                else:
+                    down_done = True
+
             logging.debug(
                 f"File Size: {size // 1024}",
             )
