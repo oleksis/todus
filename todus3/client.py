@@ -182,7 +182,9 @@ class ToDusClient:
                 file.write(resp.content)
             return size
 
-    def download_file(self, token: str, url: str, path: str) -> int:
+    def download_file(
+        self, token: str, url: str, path: str, down_timeout: float = 60 * 20
+    ) -> int:
         """Download file URL.
 
         Returns the file size.
@@ -190,4 +192,4 @@ class ToDusClient:
         kwargs = {"args": (token, url)}
         url = self._run_task(self.task_download_1, self.timeout, **kwargs)
         kwargs = {"args": (token, url, path)}  # type: ignore [dict-item]
-        return self._run_task(self.task_download_2, self.timeout, **kwargs)
+        return self._run_task(self.task_download_2, down_timeout, **kwargs)

@@ -1,8 +1,8 @@
 import argparse
-import configparser
 import logging
 import os
 import time
+from configparser import ConfigParser
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import List
@@ -11,14 +11,22 @@ from urllib.parse import quote_plus, unquote_plus
 import multivolumefile
 import py7zr
 
-from . import __version__
+from . import __app_name__, __version__
 from .client import ToDusClient
 
-logging.basicConfig(format="%(levelname)s - %(message)s", level=logging.INFO)
-
+logging.basicConfig(
+    format="%(asctime)s-%(levelname)s-%(name)s-%(message)s", level=logging.INFO
+)
+logger = logging.getLogger(__app_name__)
+logger.setLevel(logging.INFO)
+handler_error = logging.FileHandler("logs", encoding="utf-8")
+handler_error.setLevel(logging.ERROR)
+logger.addHandler(handler_error)
 
 client = ToDusClient()
-config = configparser.ConfigParser()
+config = ConfigParser()
+MAX_RETRY = 3
+DOWN_TIMEOUT = 60 * 20  # 20 MINS
 
 
 def write_txt(filename: str, urls: List[str], parts: List[str]) -> str:
@@ -29,7 +37,9 @@ def write_txt(filename: str, urls: List[str], parts: List[str]) -> str:
     return str(path)
 
 
-def split_upload(token: str, path: str, part_size: int) -> str:
+def split_upload(
+    token: str, path: str, part_size: int, max_retry: int = MAX_RETRY
+) -> str:
     global client
 
     with open(path, "rb") as file:
@@ -52,21 +62,21 @@ def split_upload(token: str, path: str, part_size: int) -> str:
         for i, name in enumerate(parts, 1):
             retry = 0
             up_done = False
-            logging.info(f"Uploading {i}/{parts_count}: {filename}.7z.{i:04}")
+            logger.info(f"Uploading {i}/{parts_count}: {name}")
             with open(os.path.join(tempdir, name), "rb") as file:
                 part = file.read()
 
-            while not up_done and retry < 2:
+            while not up_done and retry < max_retry:
                 try:
                     urls.append(client.upload_file(token, part, len(part)))
                 except Exception as ex:
-                    logging.warning(str(ex))
+                    logger.exception(ex)
                     retry += 1
-                    if retry == 2:
+                    if retry == max_retry:
                         raise ValueError(
                             f"Failed to upload part {i} ({len(part):,}B): {ex}"
                         )
-                    logging.info(f"Retrying: {retry}...")
+                    logger.info(f"Retrying: {retry}...")
                     time.sleep(15)
                 else:
                     up_done = True
@@ -129,14 +139,14 @@ def register(client: ToDusClient, phone: str) -> str:
     client.request_code(phone)
     pin = input("Enter PIN:").strip()
     password = client.validate_code(phone, pin)
-    logging.debug("PASSWORD: %s", password)
+    logger.debug("PASSWORD: %s", password)
     return password
 
 
-def get_password(phone: str, folder: str) -> str:
+def read_config(phone: str, folder: str = ".") -> ConfigParser:
     config_path = Path(folder) / Path(f"{phone}.ini")
     config.read(config_path)
-    return config["DEFAULT"].get("password", "") if "DEFAULT" in config else ""
+    return config
 
 
 def save_config(phone: str, folder: str = ".") -> None:
@@ -144,41 +154,59 @@ def save_config(phone: str, folder: str = ".") -> None:
         config.write(configfile)
 
 
+def get_default(dtype, dkey: str, phone: str, folder: str, dvalue: str = ""):
+    return dtype(
+        read_config(phone, folder)["DEFAULT"].get(dkey, str(dvalue))
+        if "DEFAULT" in config
+        else dvalue
+    )
+
+
 def main() -> None:
-    global client
+    global client, config
 
     parser = get_parser()
     args = parser.parse_args()
-    phone = args.number
-    password = get_password(phone, args.folder) or "***FIX_TEMP***"
+    folder: str = args.folder
+    phone: str = f"535{args.number[-7:]}"  # Country Code + phone
+    password: str = get_default(str, "password", phone, folder, "")
+    max_retry: int = get_default(int, "max_retry", phone, folder, str(MAX_RETRY))
+    config["DEFAULT"]["max_retry"] = str(max_retry)
+    down_timeout: float = get_default(
+        float, "down_timeout", phone, folder, str(DOWN_TIMEOUT)
+    )
+    config["DEFAULT"]["down_timeout"] = str(down_timeout)
+    production: bool = get_default(bool, "production", phone, folder, "True")
+    config["DEFAULT"]["production"] = str(production)
+
+    if production:
+        logging.raiseExceptions = False
 
     if not password and args.command != "login":
         print("ERROR: account not authenticated, login first.")
         return
 
     if args.command == "upload":
-        # token = client.login(phone, password)
-        token = config["DEFAULT"].get("token", "") if "DEFAULT" in config else ""
-        logging.debug(f"Token: '{token}'")
+        token = client.login(phone, password)
+        logger.debug(f"Token: '{token}'")
 
         for path in args.file:
             filename = os.path.basename(path)
-            logging.info(f"Uploading: {filename}")
+            logger.info(f"Uploading: {filename}")
             if args.part_size:
-                txt = split_upload(token, path, args.part_size)
-                logging.info(f"TXT: {txt}")
+                txt = split_upload(token, path, args.part_size, max_retry=max_retry)
+                logger.info(f"TXT: {txt}")
             else:
                 with open(path, "rb") as file:
                     data = file.read()
                 file_uri = client.upload_file(token, data, len(data))
                 down_url = f"{file_uri}?name={quote_plus(filename)}"
-                logging.info(f"URL: {down_url}")
+                logger.info(f"URL: {down_url}")
                 txt = write_txt(filename, urls=[file_uri], parts=[filename])
-                logging.info(f"TXT: {txt}")
+                logger.info(f"TXT: {txt}")
     elif args.command == "download":
-        # token = client.login(phone, password)
-        token = config["DEFAULT"].get("token", "") if "DEFAULT" in config else ""
-        logging.debug(f"Token: '{token}'")
+        token = client.login(phone, password)
+        logger.debug(f"Token: '{token}'")
 
         while args.url:
             retry = 0
@@ -197,37 +225,37 @@ def main() -> None:
                     args.url = urls + args.url
                     continue
 
-            logging.info(
+            logger.info(
                 f"Downloading: {file_uri}",
             )
             file_uri, name = file_uri.split("?name=", maxsplit=1)
             name = unquote_plus(name)
             size = 0
 
-            while not down_done and retry < 2:
+            while not down_done and retry < max_retry:
                 try:
-                    size = client.download_file(token, file_uri, name)
+                    size = client.download_file(token, file_uri, name, down_timeout)
                 except Exception as ex:
-                    logging.warning(str(ex))
+                    logger.exception(ex)
                     retry += 1
-                    if retry == 2:
-                        logging.exception(ex)
+                    if retry == max_retry:
+                        continue
+                    logger.info(f"Retrying: {retry}...")
+                    time.sleep(15)
                 else:
                     down_done = True
 
-            logging.debug(
+            logger.debug(
                 f"File Size: {size // 1024}",
             )
     elif args.command == "login":
-        # TODO: Fix Register
-        # password = register(client, phone)
-        # token = client.login(phone, password)
-
-        token = config["DEFAULT"].get("token", "") if "DEFAULT" in config else ""
-        logging.debug(f"Token: '{token}'")
+        password = register(client, phone)
+        token = client.login(phone, password)
+        logger.debug(f"Token: '{token}'")
 
         config["DEFAULT"]["password"] = password
         config["DEFAULT"]["token"] = token
-        save_config(phone, args.folder)
     else:
         parser.print_usage()
+
+    save_config(phone, folder)
