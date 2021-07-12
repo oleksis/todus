@@ -5,6 +5,7 @@ __pycache__
 
 *.7z*
 *.zip*
+*.rar
 *.txt
 *.ini
 *.msixbundle
@@ -28,6 +29,7 @@ mypy_report/
 *.egg-info
 
 .doit.db.db
+logs
 
 # Unit test / coverage reports
 htmlcov/

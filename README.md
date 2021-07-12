@@ -23,11 +23,5 @@ todus -- help
 
 todus -n 53123456 login
 
-echo "Update TOKEN in 53123456.ini"
-
 todus -n 53123456 download file.txt
 ```
-
-⚠️ Working downloads/uploads. ✅
-
-👷🏾‍♂️ TODO: Login/Register
