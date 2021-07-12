@@ -12,6 +12,8 @@ __pycache__
 *.exe
 *.msi
 
+todus/
+
 # TODO: Add tests
 tests/
 
