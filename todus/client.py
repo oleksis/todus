@@ -1,10 +1,15 @@
+import logging
 import string
 from typing import Any, Callable, Dict, Optional, Tuple
 
 import requests
 
+from . import __app_name__
 from .s3 import get_real_url, reserve_url
 from .util import ResultProcess, generate_token
+
+
+logger = logging.getLogger(__app_name__)
 
 
 class ToDusClient:
@@ -36,13 +41,12 @@ class ToDusClient:
             return self._process.get_result(timeout)
         except (AttributeError, PermissionError) as ex:
             # AttributeError: Can't pickle local object 'ToDusClient.login.<locals>.task'
-            raise ex
-        finally:
+            logger.exception(ex)
             self.abort()
 
     def abort(self) -> None:
         if self._process is not None and self._process.is_alive():
-            self._process.kill()  # type: ignore [attr-defined]
+            self._process.terminate()
             self._process.abort()
             self._process = None
 

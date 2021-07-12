@@ -11,7 +11,7 @@ Use the ToDus API in your Python projects.
 
 ## Install
 
-To install run::
+To install run
 ```bash
   python -m pip install -U pip setuptools wheel
   pip install -U https://github.com/oleksis/todus/archive/releases.tar.gz
@@ -24,4 +24,6 @@ todus -- help
 todus -n 53123456 login
 
 todus -n 53123456 download file.txt
+
+todus -n 53123456 upload binary.zip -p 10485760
 ```
