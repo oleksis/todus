@@ -44,17 +44,17 @@ def split_upload(
 
     with open(path, "rb") as file:
         data = file.read()
-    filename = os.path.basename(path)
+    filename = Path(path).name
     with TemporaryDirectory() as tempdir:
         with multivolumefile.open(
-            os.path.join(tempdir, filename + ".7z"),
+            Path(f"{tempdir}/{filename}.7z"),
             "wb",
             volume=part_size,
         ) as vol:
             with py7zr.SevenZipFile(vol, "w") as a:  # type: ignore
                 a.writestr(data, filename)
         del data
-        parts = sorted(os.listdir(tempdir))
+        parts = sorted(_file.name for _file in Path(tempdir).iterdir())
         parts_count = len(parts)
 
         urls = []
@@ -63,7 +63,7 @@ def split_upload(
             retry = 0
             up_done = False
             logger.info(f"Uploading {i}/{parts_count}: {name}")
-            with open(os.path.join(tempdir, name), "rb") as file:
+            with open(Path(f"{tempdir}/{name}"), "rb") as file:
                 part = file.read()
 
             while not up_done and retry < max_retry:
@@ -87,8 +87,8 @@ def split_upload(
 
 def get_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog=__name__.split(".")[0],
-        description="ToDus Client",
+        prog=__app_name__,
+        description="ToDus Client for S3",
     )
     parser.add_argument(
         "-n",
@@ -163,7 +163,7 @@ def get_default(dtype, dkey: str, phone: str, folder: str, dvalue: str = ""):
 
 
 def main() -> None:
-    global client, config
+    global client, config, logger
 
     parser = get_parser()
     args = parser.parse_args()
@@ -181,6 +181,8 @@ def main() -> None:
 
     if production:
         logging.raiseExceptions = False
+    else:
+        logger.setLevel(logging.DEBUG)
 
     if not password and args.command != "login":
         print("ERROR: account not authenticated, login first.")
@@ -191,7 +193,7 @@ def main() -> None:
         logger.debug(f"Token: '{token}'")
 
         for path in args.file:
-            filename = os.path.basename(path)
+            filename = Path(path).name
             logger.info(f"Uploading: {filename}")
             if args.part_size:
                 txt = split_upload(token, path, args.part_size, max_retry=max_retry)

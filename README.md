@@ -1,4 +1,4 @@
-# ToDus client
+# ToDus client for S3
 
 [![](https://img.shields.io/pypi/v/todus3.svg)](https://pypi.org/project/todus3)
 [![](https://img.shields.io/pypi/pyversions/todus3.svg)](
