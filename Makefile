@@ -31,11 +31,11 @@ test:
 
 .PHONY: test-cov
 test-cov:
-	$(PY) -m pytest --cov-report term-missing --cov=todus tests/ -vv
+	$(PY) -m pytest --cov-report term-missing --cov=todus3 tests/ -vv
 
 .PHONY: typecheck
 typecheck:
-	mypy -p todus
+	mypy -p todus3
 
 .PHONY: clean
 clean: clean-build clean-pyc clean-test

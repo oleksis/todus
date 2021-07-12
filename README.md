@@ -23,4 +23,6 @@ todus3 -- help
 todus3 -n 53123456 login
 
 todus3 -n 53123456 download file.txt
+
+todus3 -n 53123456 upload binary.zip -p 10485760
 ```
