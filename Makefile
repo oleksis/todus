@@ -11,7 +11,7 @@ ifeq ($(OS), Windows_NT)
 endif
 
 
-all: format lint test
+all: format typecheck lint test
 
 .PHONY: lint
 lint:
