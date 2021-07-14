@@ -33,7 +33,7 @@ jobs:
         make lint
     - name: Test with pytest
       run: |
-        # make test
+        make test
   make_sdist:
     name: Make SDist
     runs-on: ubuntu-latest
