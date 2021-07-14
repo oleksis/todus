@@ -11,7 +11,7 @@ Use the ToDus API in your Python projects.
 
 ## Install
 
-To install run::
+To install run
 ```bash
   pip install todus3
 ```

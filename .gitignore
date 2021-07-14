@@ -14,9 +14,6 @@ __pycache__
 
 todus/
 
-# TODO: Add tests
-tests/
-
 dist/
 build/
 env/

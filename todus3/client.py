@@ -1,15 +1,47 @@
 import logging
+import socket
 import string
+from queue import Empty, Queue
 from typing import Any, Callable, Dict, Optional, Tuple
 
 import requests
 
-from . import __app_name__
+from .errors import AbortError
 from .s3 import get_real_url, reserve_url
-from .util import ResultProcess, generate_token
+from .util import generate_token
+
+DEFAULT_TIMEOUT = 60 * 2  # 2 minutes
+logger = logging.getLogger(__name__)
 
 
-logger = logging.getLogger(__app_name__)
+class ResultProcess:
+    def __init__(self, target, *args, **kwargs) -> None:
+        self._real_target = target
+        self.args = args
+        self.kwargs = kwargs
+        self._result_queue: Queue = Queue()
+        self._failed = False
+
+    def start(self, *args, **kwargs) -> None:
+        try:
+            self._result_queue.put(self._real_target(*args, **kwargs))
+        except Exception as ex:
+            self._failed = True
+            self._result_queue.put(ex)
+
+    def abort(self) -> None:
+        self._failed = True
+        self._result_queue.put(AbortError())
+
+    def get_result(self, timeout: float = None):
+        result = None
+        try:
+            result = self._result_queue.get(timeout=timeout)
+        except Empty:
+            raise TimeoutError("Operation timed out.")
+        if self._failed:
+            raise result
+        return result
 
 
 class ToDusClient:
@@ -19,36 +51,29 @@ class ToDusClient:
         self.version_name = version_name
         self.version_code = version_code
 
-        self.timeout = 60
+        self.timeout = DEFAULT_TIMEOUT
         self.session = requests.Session()
         self.session.headers.update(
             {
                 "Accept-Encoding": "gzip",
             }
         )
-        self._real_request = self.session.request
-        self.session.request = self._request  # type: ignore[assignment]
         self._process: Optional[ResultProcess] = None
 
-    def _request(self, *args, **kwargs) -> requests.Response:
-        kwargs.setdefault("timeout", self.timeout)
-        return self._real_request(*args, **kwargs)
-
-    def _run_task(self, task: Callable, timeout: float, **kwargs) -> Any:
-        self._process = ResultProcess(target=task, **kwargs)
+    def _run_task(self, task: Callable, timeout: float, *args, **kwargs) -> Any:
+        self._process = ResultProcess(task, *args, **kwargs)
         try:
-            self._process.start()
+            self._process.start(*args, **kwargs)
             return self._process.get_result(timeout)
-        except (AttributeError, PermissionError) as ex:
-            # AttributeError: Can't pickle local object 'ToDusClient.login.<locals>.task'
+        except Exception as ex:
             logger.exception(ex)
             self.abort()
 
     def abort(self) -> None:
-        if self._process is not None and self._process.is_alive():
-            self._process.terminate()
+        if self._process is not None:
             self._process.abort()
             self._process = None
+        self.session.close()
 
     @property
     def auth_ua(self) -> str:
@@ -71,7 +96,6 @@ class ToDusClient:
         }
 
     def task_request_code(self, phone_number: str) -> None:
-        # TODO: Fix payload/data
         headers = self.headers_auth
         data = (
             b"\n\n"
@@ -85,11 +109,10 @@ class ToDusClient:
 
     def request_code(self, phone_number: str) -> None:
         """Request server to send verification SMS code."""
-        kwargs = {"args": (phone_number,)}
-        self._run_task(self.task_request_code, self.timeout, **kwargs)
+        args = (phone_number,)
+        self._run_task(self.task_request_code, self.timeout, *args)
 
     def task_validate_code(self, phone_number: str, code: str) -> str:
-        # TODO: Fix payload/data
         headers = self.headers_auth
         data = (
             b"\n\n"
@@ -113,11 +136,13 @@ class ToDusClient:
 
         Returns the account password.
         """
-        kwargs = {"args": (phone_number, code)}
-        return self._run_task(self.task_validate_code, self.timeout, **kwargs)
+        args = (
+            phone_number,
+            code,
+        )
+        return self._run_task(self.task_validate_code, self.timeout, *args)
 
     def task_login(self, phone_number: str, password: str) -> str:
-        # TODO: Fix payload/data
         headers = self.headers_auth
         data = (
             b"\n\n"
@@ -137,8 +162,11 @@ class ToDusClient:
 
     def login(self, phone_number: str, password: str) -> str:
         """Login with phone number and password to get an access token."""
-        kwargs = {"args": (phone_number, password)}
-        return self._run_task(self.task_login, self.timeout, **kwargs)
+        args = (
+            phone_number,
+            password,
+        )
+        return self._run_task(self.task_login, self.timeout, *args)
 
     def task_upload_file_1(self, token: str, size: int) -> Tuple[str, str]:
         return reserve_url(token, size)
@@ -161,30 +189,39 @@ class ToDusClient:
         if size is None:
             size = len(data)
 
-        kwargs = {"args": (token, size)}
-        up_url, down_url = self._run_task(
-            self.task_upload_file_1, self.timeout, **kwargs
+        args = (
+            token,
+            size,
         )
+        up_url, down_url = self._run_task(self.task_upload_file_1, self.timeout, *args)
 
         timeout = max(len(data) / 1024 / 1024 * 20, self.timeout)
 
-        kwargs = {"args": (token, data, up_url, down_url, timeout)}  # type: ignore [dict-item]
-        return self._run_task(self.task_upload_file_2, timeout, **kwargs)
+        args_2 = (token, data, up_url, down_url, timeout)
+        return self._run_task(self.task_upload_file_2, timeout, *args_2)
 
-    def task_download_1(self, token, url) -> str:
-        return get_real_url(token, url)
+    def task_download_1(self, token: str, url: str) -> str:
+        try:
+            url = get_real_url(token, url)
+        except socket.timeout as ex:
+            logger.exception(ex)
+        if not url:
+            raise ValueError("Invalid URL 'None'")
+        return url
 
-    def task_download_2(self, token, url, path) -> int:
+    def task_download_2(self, token: str, url: str, path: str) -> int:
         headers = {
             "User-Agent": self.download_ua,
             "Authorization": f"Bearer {token}",
         }
+
         with self.session.get(url=url, headers=headers) as resp:
             resp.raise_for_status()
-            size = int(resp.headers.get("Content-Length", 0))
-            with open(path, "wb") as file:
-                file.write(resp.content)
-            return size
+
+        size = int(resp.headers.get("Content-Length", 0))
+        with open(path, "wb") as file:
+            file.write(resp.content)
+        return size
 
     def download_file(
         self, token: str, url: str, path: str, down_timeout: float = 60 * 20
@@ -193,7 +230,14 @@ class ToDusClient:
 
         Returns the file size.
         """
-        kwargs = {"args": (token, url)}
-        url = self._run_task(self.task_download_1, self.timeout, **kwargs)
-        kwargs = {"args": (token, url, path)}  # type: ignore [dict-item]
-        return self._run_task(self.task_download_2, down_timeout, **kwargs)
+        args = (
+            token,
+            url,
+        )
+        url = self._run_task(self.task_download_1, self.timeout, *args)
+        args_2 = (
+            token,
+            url,
+            path,
+        )
+        return self._run_task(self.task_download_2, down_timeout, *args_2)
