@@ -17,7 +17,7 @@ from .client import ToDusClient
 logging.basicConfig(
     format="%(asctime)s-%(levelname)s-%(name)s-%(message)s", level=logging.INFO
 )
-logger = logging.getLogger(__app_name__)
+logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 handler_error = logging.FileHandler("logs", encoding="utf-8")
 handler_error.setLevel(logging.ERROR)
@@ -241,15 +241,16 @@ def main() -> None:
                     logger.exception(ex)
                     retry += 1
                     if retry == max_retry:
-                        continue
+                        break
                     logger.info(f"Retrying: {retry}...")
                     time.sleep(15)
                 else:
                     down_done = True
 
-            logger.debug(
-                f"File Size: {size // 1024}",
-            )
+            if size:
+                logger.debug(
+                    f"File Size: {size // 1024}",
+                )
     elif args.command == "login":
         password = register(client, phone)
         token = client.login(phone, password)
