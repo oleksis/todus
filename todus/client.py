@@ -223,8 +223,8 @@ class ToDusClient:
 
         file_save = Path(path)
 
-        override = file_save.stat().st_size < size if file_save.exists() else True
-        if override:
+        overwrite = file_save.stat().st_size < size if file_save.exists() else True
+        if overwrite:
             with open(file_save, "wb") as file:
                 file.write(resp.content)
         return size
