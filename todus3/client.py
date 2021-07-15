@@ -1,6 +1,7 @@
 import logging
 import socket
 import string
+from pathlib import Path
 from queue import Empty, Queue
 from typing import Any, Callable, Dict, Optional, Tuple
 
@@ -219,8 +220,13 @@ class ToDusClient:
             resp.raise_for_status()
 
         size = int(resp.headers.get("Content-Length", 0))
-        with open(path, "wb") as file:
-            file.write(resp.content)
+
+        file_save = Path(path)
+
+        override = file_save.stat().st_size < size if file_save.exists() else True
+        if override:
+            with open(file_save, "wb") as file:
+                file.write(resp.content)
         return size
 
     def download_file(
