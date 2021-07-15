@@ -239,18 +239,19 @@ def main() -> None:
                     size = client.download_file(token, file_uri, name, down_timeout)
                 except Exception as ex:
                     logger.exception(ex)
+
+                if size:
+                    logger.debug(
+                        f"File: {name}, Size: {size // 1024}",
+                    )
+                    down_done = True
+
+                if not down_done or not size:
                     retry += 1
                     if retry == max_retry:
                         break
                     logger.info(f"Retrying: {retry}...")
                     time.sleep(15)
-                else:
-                    down_done = True
-
-            if size:
-                logger.debug(
-                    f"File Size: {size // 1024}",
-                )
     elif args.command == "login":
         password = register(client, phone)
         token = client.login(phone, password)
