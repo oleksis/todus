@@ -51,8 +51,8 @@ def split_upload(
             "wb",
             volume=part_size,
         ) as vol:
-            with py7zr.SevenZipFile(vol, "w") as a:  # type: ignore
-                a.writestr(data, filename)
+            with py7zr.SevenZipFile(vol, "w") as archive:  # type: ignore
+                archive.writestr(data, filename)
         del data
         parts = sorted(_file.name for _file in Path(tempdir).iterdir())
         parts_count = len(parts)
@@ -116,7 +116,7 @@ def get_parser() -> argparse.ArgumentParser:
 
     subparsers = parser.add_subparsers(dest="command")
 
-    login_parser = subparsers.add_parser(name="login", help="authenticate in server")
+    _ = subparsers.add_parser(name="login", help="authenticate in server")
 
     up_parser = subparsers.add_parser(name="upload", help="upload file")
     up_parser.add_argument(
@@ -162,6 +162,71 @@ def get_default(dtype, dkey: str, phone: str, folder: str, dvalue: str = ""):
     )
 
 
+def _upload(token: str, args: argparse.Namespace, max_retry: int):
+    for path in args.file:
+        filename = Path(path).name
+        logger.info(f"Uploading: {filename}")
+        if args.part_size:
+            txt = split_upload(token, path, args.part_size, max_retry=max_retry)
+            logger.info(f"TXT: {txt}")
+        else:
+            # TODO: Retry for single file
+            with open(path, "rb") as file:
+                data = file.read()
+            file_uri = client.upload_file(token, data, len(data))
+            down_url = f"{file_uri}?name={quote_plus(filename)}"
+            logger.info(f"URL: {down_url}")
+            txt = write_txt(filename, urls=[file_uri], parts=[filename])
+            logger.info(f"TXT: {txt}")
+
+
+def _download(
+    token: str, args: argparse.Namespace, down_timeout: float, max_retry: int
+):
+    while args.url:
+        retry = 0
+        down_done = False
+        file_uri = args.url.pop(0)
+
+        if os.path.exists(file_uri):
+            with open(file_uri) as fp:
+                urls = []
+                for line in fp.readlines():
+                    line = line.strip()
+                    if line:
+                        _url, _filename = line.split(maxsplit=1)
+                        urls.append(f"{_url}?name={_filename}")
+
+                args.url = urls + args.url
+                continue
+
+        logger.info(
+            f"Downloading: {file_uri}",
+        )
+        file_uri, name = file_uri.split("?name=", maxsplit=1)
+        name = unquote_plus(name)
+        size = 0
+
+        while not down_done and retry < max_retry:
+            try:
+                size = client.download_file(token, file_uri, name, down_timeout)
+            except Exception as ex:
+                logger.exception(ex)
+
+            if size:
+                logger.debug(
+                    f"File: {name}, Size: {size // 1024}",
+                )
+                down_done = True
+
+            if not down_done or not size:
+                retry += 1
+                if retry == max_retry:
+                    break
+                logger.info(f"Retrying: {retry}...")
+                time.sleep(15)
+
+
 def main() -> None:
     global client, config, logger
 
@@ -191,67 +256,11 @@ def main() -> None:
     if args.command == "upload":
         token = client.login(phone, password)
         logger.debug(f"Token: '{token}'")
-
-        for path in args.file:
-            filename = Path(path).name
-            logger.info(f"Uploading: {filename}")
-            if args.part_size:
-                txt = split_upload(token, path, args.part_size, max_retry=max_retry)
-                logger.info(f"TXT: {txt}")
-            else:
-                with open(path, "rb") as file:
-                    data = file.read()
-                file_uri = client.upload_file(token, data, len(data))
-                down_url = f"{file_uri}?name={quote_plus(filename)}"
-                logger.info(f"URL: {down_url}")
-                txt = write_txt(filename, urls=[file_uri], parts=[filename])
-                logger.info(f"TXT: {txt}")
+        _upload(token, args, max_retry)
     elif args.command == "download":
         token = client.login(phone, password)
         logger.debug(f"Token: '{token}'")
-
-        while args.url:
-            retry = 0
-            down_done = False
-            file_uri = args.url.pop(0)
-
-            if os.path.exists(file_uri):
-                with open(file_uri) as fp:
-                    urls = []
-                    for line in fp.readlines():
-                        line = line.strip()
-                        if line:
-                            _url, _filename = line.split(maxsplit=1)
-                            urls.append(f"{_url}?name={_filename}")
-
-                    args.url = urls + args.url
-                    continue
-
-            logger.info(
-                f"Downloading: {file_uri}",
-            )
-            file_uri, name = file_uri.split("?name=", maxsplit=1)
-            name = unquote_plus(name)
-            size = 0
-
-            while not down_done and retry < max_retry:
-                try:
-                    size = client.download_file(token, file_uri, name, down_timeout)
-                except Exception as ex:
-                    logger.exception(ex)
-
-                if size:
-                    logger.debug(
-                        f"File: {name}, Size: {size // 1024}",
-                    )
-                    down_done = True
-
-                if not down_done or not size:
-                    retry += 1
-                    if retry == max_retry:
-                        break
-                    logger.info(f"Retrying: {retry}...")
-                    time.sleep(15)
+        _download(token, args, down_timeout, max_retry)
     elif args.command == "login":
         password = register(client, phone)
         token = client.login(phone, password)
