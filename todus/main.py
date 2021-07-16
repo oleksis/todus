@@ -197,6 +197,10 @@ def _download(
                         _url, _filename = line.split(maxsplit=1)
                         urls.append(f"{_url}?name={_filename}")
 
+                count_files = len(urls)
+                plural = "" if count_files <= 1 else "s"
+                logger.info(f"Downloading: {count_files} file{plural}")
+
                 args.url = urls + args.url
                 continue
 
