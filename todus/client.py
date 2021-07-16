@@ -46,6 +46,8 @@ class ResultProcess:
 
 
 class ToDusClient:
+    """Class interact with the Todus API."""
+
     def __init__(
         self, version_name: str = "0.40.16", version_code: str = "21820"
     ) -> None:
@@ -78,14 +80,17 @@ class ToDusClient:
 
     @property
     def auth_ua(self) -> str:
+        """User Agent used for authentication."""
         return f"ToDus {self.version_name} Auth"
 
     @property
     def upload_ua(self) -> str:
+        """User Agent used for uploads."""
         return f"ToDus {self.version_name} HTTP-Upload"
 
     @property
     def download_ua(self) -> str:
+        """User Agent used for downloads."""
         return f"ToDus {self.version_name} HTTP-Download"
 
     @property
@@ -129,8 +134,7 @@ class ToDusClient:
             if b"`" in resp.content:
                 index = resp.content.index(b"`") + 1
                 return resp.content[index : index + 96].decode()
-            else:
-                return resp.content[5:166].decode()
+            return resp.content[5:166].decode()
 
     def validate_code(self, phone_number: str, code: str) -> str:
         """Validate phone number with received SMS code.
