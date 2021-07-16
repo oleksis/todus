@@ -9,7 +9,7 @@ PACKAGE_PATH = HERE.parent
 sys.path.insert(0, str(PACKAGE_PATH))
 
 
-from todus.s3 import _get_socket, _parse_token
+from todus3.s3 import _get_socket, _parse_token
 
 
 class TestS3(TestCase):
@@ -19,8 +19,8 @@ class TestS3(TestCase):
         "yMTgyMCJ9.r3W6-4gLiva_ty1G_JKZKzwAL-8vicy-BHumW-W6bqg"
     )
 
-    @patch("todus.s3.ssl")
-    @patch("todus.s3.socket")
+    @patch("todus3.s3.ssl")
+    @patch("todus3.s3.socket")
     def test_get_socket(self, mock_socket: MagicMock, mock_ssl_socket: MagicMock):
         mock_socket.socket = MagicMock(spec=socket.socket)
 

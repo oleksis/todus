@@ -8,7 +8,7 @@ PACKAGE_PATH = HERE.parent
 sys.path.insert(0, str(PACKAGE_PATH))
 
 
-from todus.util import generate_token
+from todus3.util import generate_token
 
 
 class TestUtil(TestCase):
