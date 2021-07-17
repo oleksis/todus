@@ -14,13 +14,15 @@ import py7zr
 from . import __app_name__, __version__
 from .client import ToDusClient
 
-logging.basicConfig(
-    format="%(asctime)s-%(levelname)s-%(name)s-%(message)s", level=logging.INFO
-)
+formatter = logging.Formatter("%(levelname)s-%(name)s-%(asctime)s-%(message)s")
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
+handler_default = logging.StreamHandler()
+handler_default.setFormatter(formatter)
 handler_error = logging.FileHandler("logs", encoding="utf-8")
 handler_error.setLevel(logging.ERROR)
+handler_error.setFormatter(formatter)
+logger.addHandler(handler_default)
 logger.addHandler(handler_error)
 
 client = ToDusClient()
@@ -44,7 +46,11 @@ def split_upload(
 
     with open(path, "rb") as file:
         data = file.read()
+
     filename = Path(path).name
+
+    logger.info("Compressing parts...")
+
     with TemporaryDirectory() as tempdir:
         with multivolumefile.open(
             Path(f"{tempdir}/{filename}.7z"),
@@ -63,18 +69,18 @@ def split_upload(
             retry = 0
             up_done = False
             logger.info(f"Uploading {i}/{parts_count}: {name}")
-            with open(Path(f"{tempdir}/{name}"), "rb") as file:
-                part = file.read()
+
+            temp_path = Path(f"{tempdir}/{name}")
 
             while not up_done and retry < max_retry:
                 try:
-                    urls.append(client.upload_file(token, part, len(part)))
+                    urls.append(client.upload_file(token, temp_path, index=i))
                 except Exception as ex:
-                    logger.exception(ex)
+                    logger.error(ex)
                     retry += 1
                     if retry == max_retry:
                         raise ValueError(
-                            f"Failed to upload part {i} ({len(part):,}B): {ex}"
+                            f"Failed to upload part {i} ({temp_path.stat().st_size:,}B): {ex}"
                         )
                     logger.info(f"Retrying: {retry}...")
                     time.sleep(15)
@@ -171,9 +177,8 @@ def _upload(token: str, args: argparse.Namespace, max_retry: int):
             logger.info(f"TXT: {txt}")
         else:
             # TODO: Retry for single file
-            with open(path, "rb") as file:
-                data = file.read()
-            file_uri = client.upload_file(token, data, len(data))
+            filename_path = Path(path)
+            file_uri = client.upload_file(token, filename_path)
             down_url = f"{file_uri}?name={quote_plus(filename)}"
             logger.info(f"URL: {down_url}")
             txt = write_txt(filename, urls=[file_uri], parts=[filename])
@@ -215,7 +220,7 @@ def _download(
             try:
                 size = client.download_file(token, file_uri, name, down_timeout)
             except Exception as ex:
-                logger.exception(ex)
+                logger.error(ex)
 
             if size:
                 logger.debug(

@@ -6,12 +6,15 @@ from queue import Empty, Queue
 from typing import Any, Callable, Dict, Optional, Tuple
 
 import requests
+from tqdm import tqdm
+from tqdm.utils import CallbackIOWrapper
 
 from .errors import AbortError
 from .s3 import get_real_url, reserve_url
 from .util import generate_token
 
 DEFAULT_TIMEOUT = 60 * 2  # 2 minutes
+CHUNK_SIZE = 1024
 logger = logging.getLogger(__name__)
 
 
@@ -69,7 +72,7 @@ class ToDusClient:
             self._process.start(*args, **kwargs)
             return self._process.get_result(timeout)
         except Exception as ex:
-            logger.exception(ex)
+            logger.error(ex)
             self.abort()
 
     def abort(self) -> None:
@@ -177,22 +180,45 @@ class ToDusClient:
         return reserve_url(token, size)
 
     def task_upload_file_2(
-        self, token: str, data: bytes, up_url: str, down_url: str, timeout: float
+        self,
+        token: str,
+        filename_path: Path,
+        up_url: str,
+        down_url: str,
+        timeout: float,
+        index: int,
     ) -> str:
         headers = {
             "User-Agent": self.upload_ua,
             "Authorization": f"Bearer {token}",
         }
-        with self.session.put(
-            url=up_url, data=data, headers=headers, timeout=timeout
-        ) as resp:
-            resp.raise_for_status()
+
+        size = filename_path.stat().st_size if filename_path.exists() else 0
+
+        with tqdm(
+            total=size,
+            desc=f"Part {index}",
+            unit="B",
+            unit_scale=True,
+            unit_divisor=CHUNK_SIZE,
+        ) as t:
+            fileobj = open(filename_path, "rb")
+            wrapped_file = CallbackIOWrapper(t.update, fileobj, "read")
+            with self.session.put(
+                url=up_url,
+                data=wrapped_file,  # type: ignore
+                headers=headers,
+                timeout=timeout,
+                stream=True,
+            ) as resp:
+                resp.raise_for_status()
+            if not fileobj.closed:
+                fileobj.close()
         return down_url
 
-    def upload_file(self, token: str, data: bytes, size: int = None) -> str:
+    def upload_file(self, token: str, filename_path: Path, index: int = 1) -> str:
         """Upload data and return the download URL."""
-        if size is None:
-            size = len(data)
+        size = filename_path.stat().st_size if filename_path.exists() else 0
 
         args = (
             token,
@@ -200,41 +226,52 @@ class ToDusClient:
         )
         up_url, down_url = self._run_task(self.task_upload_file_1, self.timeout, *args)
 
-        timeout = max(len(data) / 1024 / 1024 * 20, self.timeout)
+        timeout = max(size / 1024 / 1024 * 20, self.timeout)
 
-        args_2 = (token, data, up_url, down_url, timeout)
+        args_2 = (token, filename_path, up_url, down_url, timeout, index)
         return self._run_task(self.task_upload_file_2, timeout, *args_2)
 
     def task_download_1(self, token: str, url: str) -> str:
         try:
             url = get_real_url(token, url)
         except socket.timeout as ex:
-            logger.exception(ex)
+            logger.error(ex)
         if not url:
             raise ValueError("Invalid URL 'None'")
         return url
 
-    def task_download_2(self, token: str, url: str, path: str) -> int:
+    def task_download_2(self, token: str, url: str, filename_path: str) -> int:
         headers = {
             "User-Agent": self.download_ua,
             "Authorization": f"Bearer {token}",
         }
+        size = 0
 
-        with self.session.get(url=url, headers=headers) as resp:
+        with self.session.get(url=url, headers=headers, stream=True) as resp:
             resp.raise_for_status()
 
-        size = int(resp.headers.get("Content-Length", 0))
+            size = int(resp.headers.get("content-length", 0))
 
-        file_save = Path(path)
+            file_save = Path(filename_path)
 
-        overwrite = file_save.stat().st_size < size if file_save.exists() else True
-        if overwrite:
-            with open(file_save, "wb") as file:
-                file.write(resp.content)
+            overwrite = file_save.stat().st_size < size if file_save.exists() else True
+            if overwrite:
+                with tqdm.wrapattr(
+                    open(file_save, "wb"),
+                    "write",
+                    miniters=1,
+                    desc=file_save.name,
+                    total=size,
+                    unit="B",
+                    unit_scale=True,
+                    unit_divisor=CHUNK_SIZE,
+                ) as fout:
+                    for chunk in resp.iter_content(chunk_size=CHUNK_SIZE):
+                        fout.write(chunk)
         return size
 
     def download_file(
-        self, token: str, url: str, path: str, down_timeout: float = 60 * 20
+        self, token: str, url: str, filename_path: str, down_timeout: float = 60 * 20
     ) -> int:
         """Download file URL.
 
@@ -248,6 +285,6 @@ class ToDusClient:
         args_2 = (
             token,
             url,
-            path,
+            filename_path,
         )
         return self._run_task(self.task_download_2, down_timeout, *args_2)

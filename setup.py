@@ -18,7 +18,7 @@ def get_requirements(file_path):
 
 if __name__ == "__main__":
     MODULE_NAME = "todus3"
-    DESC = "ToDus client"
+    DESC = "ToDus client for S3"
     URL = "https://github.com/oleksis/todus/tree/todus3"
     version = ""
 
