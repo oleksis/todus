@@ -151,6 +151,7 @@ class ToDusClient:
         return self._run_task(self.task_validate_code, self.timeout, *args)
 
     def task_login(self, phone_number: str, password: str) -> str:
+        token = ""
         headers = self.headers_auth
         data = (
             b"\n\n"
@@ -166,7 +167,8 @@ class ToDusClient:
         with self.session.post(url, data=data, headers=headers) as resp:
             resp.raise_for_status()
             token = "".join([c for c in resp.text if c in string.printable])
-            return token
+
+        return token
 
     def login(self, phone_number: str, password: str) -> str:
         """Login with phone number and password to get an access token."""
