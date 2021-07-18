@@ -188,26 +188,30 @@ def _upload(token: str, args: argparse.Namespace, max_retry: int):
 def _download(
     token: str, args: argparse.Namespace, down_timeout: float, max_retry: int
 ):
+    urls = []
+
     while args.url:
         retry = 0
         down_done = False
         file_uri = args.url.pop(0)
 
+        # Extract URLS from current TXT
         if os.path.exists(file_uri):
             with open(file_uri) as fp:
-                urls = []
                 for line in fp.readlines():
                     line = line.strip()
                     if line:
                         _url, _filename = line.split(maxsplit=1)
                         urls.append(f"{_url}?name={_filename}")
 
-                count_files = len(urls)
-                plural = "" if count_files <= 1 else "s"
-                logger.info(f"Downloading: {count_files} file{plural}")
-
                 args.url = urls + args.url
+                txt_process = True
                 continue
+
+        if urls:
+            count_files = len(urls)
+            plural = "" if count_files <= 1 else "s"
+            logger.info(f"Downloading: {count_files} file{plural}")
 
         logger.info(
             f"Downloading: {file_uri}",
@@ -234,6 +238,8 @@ def _download(
                     break
                 logger.info(f"Retrying: {retry}...")
                 time.sleep(15)
+
+        urls = []
 
 
 def main() -> None:

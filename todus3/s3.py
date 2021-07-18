@@ -56,6 +56,7 @@ def _negociate_start(
 
 
 def _parse_token(token: str) -> Tuple[str, bytes]:
+    assert token, "Invalid Token 'None'"
     phone = json.loads(b64decode(token.split(".")[1]).decode())["username"]
     authstr = b64encode((chr(0) + phone + chr(0) + token).encode("utf-8"))
     return phone, authstr
