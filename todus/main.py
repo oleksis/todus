@@ -205,7 +205,6 @@ def _download(
                         urls.append(f"{_url}?name={_filename}")
 
                 args.url = urls + args.url
-                txt_process = True
                 continue
 
         if urls:

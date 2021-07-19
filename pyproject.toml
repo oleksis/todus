@@ -1,0 +1,47 @@
+[tool.poetry]
+name = "todus"
+homepage = "https://github.com/oleksis/todus/tree/todus3"
+repository = "https://github.com/oleksis/todus/tree/todus3"
+version = "0.5.1"
+description = "ToDus client for S3"
+authors = ["adbenitez <adbenitez@nauta.cu>"]
+maintainers = ["Oleksis Fraga <oleksis.fraga@gmail.com>"]
+license = "MPL"
+readme = "README.md"
+keywords = ["todus" , "s3", "client"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.6",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "License :: OSI Approved :: Mozilla Public License 2.0 (MPL 2.0)",
+    "Operating System :: OS Independent",
+    "Topic :: Utilities"
+]
+
+[tool.poetry.dependencies]
+python = "^3.6.2"
+requests = "^2.25.1"
+py7zr = "^0.16.1"
+multivolumefile = "^0.2.3"
+tqdm = "^4.61.2"
+
+[tool.poetry.dev-dependencies]
+black = "^21.6b0"
+flake8 = "^3.9.2"
+mypy = "^0.910"
+types-requests = "^2.25.0"
+pytest = "^6.2.4"
+
+[tool.poetry.scripts]
+todus = 'todus.main:main'
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
