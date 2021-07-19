@@ -22,6 +22,8 @@ env/
 typings/
 mypy_report/
 
+poetry.lock
+
 .idea
 .vscode
 *.spec
