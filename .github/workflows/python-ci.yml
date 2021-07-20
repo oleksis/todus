@@ -6,66 +6,55 @@ on:
       - 'v*'
 
 jobs:
-  test:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: [3.8, 3.9]
-        poetry-version: [1.1.7]
-        os: [ubuntu-latest]
+  test_publish:
+    runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
-    - name: Set up Python ${{ matrix.python-version }}
+    - name: Set up Python
       uses: actions/setup-python@v2
       with:
-        python-version: ${{ matrix.python-version }}
-    - name: Run image
-      uses: abatilo/actions-poetry@v2.0.0
+        python-version: '3.8.3'
+        architecture: 'x64'
+    - name: Cache Poetry
+      id: cache-poetry
+      uses: actions/cache@v2.1.6
       with:
-        poetry-version: ${{ matrix.poetry-version }}
-    - name: Install dependencies
-      run: poetry install
-    - name: Check code with black
+        path: ~/.poetry
+        key: ubuntu-latest-poetry
+    - name: Install latest version of Poetry
+      if: steps.cache-poetry.outputs.cache-hit != 'true'
       run: |
-        make format-check
+        curl -sSL https://raw.githubusercontent.com/python-poetry/poetry/master/get-poetry.py | python -
+    - name: Add Poetry to $PATH
+      run: |
+        echo "$HOME/.poetry/bin" >> $GITHUB_PATH
+    - name: Get Poetry version
+      run: poetry --version
+    - name: Check pyproject.toml validity
+      run: poetry check --no-interaction
+    - name: Cache dependencies
+      id: cache-deps
+      uses: actions/cache@v2.1.6
+      with:
+        path: ${{github.workspace}}/.venv
+        key: poetry-${{ hashFiles('**/poetry.lock') }}
+        restore-keys: ubuntu-latest-
+    - name: Install deps
+      if: steps.cache-deps.cache-hit != 'true'
+      run: |
+        poetry config virtualenvs.in-project true
+        poetry install --no-interaction
+    - name: Check code with black
+      run: poetry run black --check .
     - name: Lint with flake8
       run: |
-        # stop the build if there are Python syntax errors or undefined names
-        make lint
+        poetry run flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+        poetry run flake8 . --count --exit-zero --max-complexity=12 --max-line-length=127 --statistics
     - name: Test with pytest
+      run: poetry run pytest -v
+    - name: Publish to PyPI
+      env:
+        PYPI_TOKEN: ${{ secrets.PYPI_PASSWORD }}
       run: |
-        make test
-  build_sdist_wheel:
-    name: SDist and Wheel
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v2
-    - name: Set up Python 3.8
-      uses: actions/setup-python@v2
-      with:
-          python-version: '3.8'
-          architecture: 'x64'
-    - name: Run image
-      uses: abatilo/actions-poetry@v2.0.0
-      with:
-        poetry-version: '1.1.7'
-    - name: Install dependencies
-      run: poetry install
-    - name: Build SDist and Wheel
-      run: poetry build
-    - uses: actions/upload-artifact@v2
-      with:
-        path: dist/*
-  pypi_publish:
-    needs: [test, build_sdist_wheel]
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/download-artifact@v2
-      with:
-        name: artifact
-        path: dist
-    - uses: pypa/gh-action-pypi-publish@v1.2.2
-      with:
-        user: __token__
-        password: ${{ secrets.PYPI_PASSWORD }}
+        poetry config pypi-token.pypi $PYPI_TOKEN
+        poetry publish --build
