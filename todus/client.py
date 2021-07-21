@@ -9,9 +9,9 @@ import requests
 from tqdm import tqdm
 from tqdm.utils import CallbackIOWrapper
 
-from .errors import AbortError
-from .s3 import get_real_url, reserve_url
-from .util import generate_token
+from todus.errors import AbortError
+from todus.s3 import get_real_url, reserve_url
+from todus.util import generate_token
 
 DEFAULT_TIMEOUT = 60 * 2  # 2 minutes
 CHUNK_SIZE = 1024
@@ -261,11 +261,11 @@ class ToDusClient:
 
             overwrite = file_save.stat().st_size < size if file_save.exists() else True
             if overwrite:
+                print(f"{file_save.name}:")
                 with tqdm.wrapattr(
                     open(file_save, "wb"),
                     "write",
                     miniters=1,
-                    desc=file_save.name,
                     total=size,
                     unit="B",
                     unit_scale=True,
