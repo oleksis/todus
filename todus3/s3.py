@@ -5,8 +5,8 @@ import ssl
 from base64 import b64decode, b64encode
 from typing import Tuple
 
-from .errors import AuthenticationError, EndOfStreamError
-from .util import generate_token
+from todus3.errors import AuthenticationError, EndOfStreamError
+from todus3.util import generate_token
 
 _BUFFERSIZE = 1024 * 1024
 

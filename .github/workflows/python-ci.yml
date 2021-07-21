@@ -6,7 +6,7 @@ on:
       - 'v*'
 
 jobs:
-  test_publish:
+  test:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
@@ -52,6 +52,84 @@ jobs:
         poetry run flake8 . --count --exit-zero --max-complexity=12 --max-line-length=127 --statistics
     - name: Test with pytest
       run: poetry run pytest -v
+  pyinstaller_publish:
+    needs: [test]
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Set up Python
+      uses: actions/setup-python@v2
+      with:
+        python-version: '3.8.3'
+        architecture: 'x64'
+    - name: Cache Poetry
+      id: cache-poetry
+      uses: actions/cache@v2.1.6
+      with:
+        path: ~/.poetry
+        key: windows-latest-poetry
+    - name: Install latest version of Poetry
+      if: steps.cache-poetry.outputs.cache-hit != 'true'
+      run: |
+        (Invoke-WebRequest -Uri https://raw.githubusercontent.com/python-poetry/poetry/master/get-poetry.py -UseBasicParsing).Content | python -
+    - name: Get Poetry version
+      run: poetry --version
+    - name: Check pyproject.toml validity
+      run: poetry check --no-interaction
+    - name: Cache dependencies
+      id: cache-deps
+      uses: actions/cache@v2.1.6
+      with:
+        path: ${{github.workspace}}/venv
+        key: poetry-${{ hashFiles('**/poetry.lock') }}
+        restore-keys: windows-latest-
+    - name: Install deps
+      if: steps.cache-deps.cache-hit != 'true'
+      run: |
+        poetry config virtualenvs.in-project true
+        poetry install --no-interaction
+    - name: Build BundleApp with PyInstaller
+      run: poetry run python .\devscripts\pyinstaller.py
+    - name: Create Release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ github.ref }}
+        release_name: todus3
+        draft: false
+        prerelease: false
+    - name: Upload Executable todus3.exe
+      id: upload-release-asset 
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./dist/todus3.exe
+        asset_name: todus3.exe
+        asset_content_type: application/octet-stream
+    - name: Get SHA2-256SUMS for todus3.exe
+      id: sha2_file
+      run: echo "::set-output name=sha2_windows::$((Get-FileHash dist\todus3.exe -Algorithm SHA256).Hash.ToLower())"
+    - name: Make SHA2-256SUMS file
+      env:
+        SHA2_WINDOWS: ${{ steps.sha2_file.outputs.sha2_windows }}
+      run: |
+        echo "${env:SHA2_WINDOWS}  todus3.exe" > SHA2-256SUMS
+    - name: Upload SHA2-256SUMS to Release
+      id: upload-release-sha2 
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./SHA2-256SUMS
+        asset_name: SHA2-256SUMS
+        asset_content_type: text/plain
+    - name: Delete file
+      run: Remove-Item -Force .\dist\todus3.exe
     - name: Publish to PyPI
       env:
         PYPI_TOKEN: ${{ secrets.PYPI_PASSWORD }}

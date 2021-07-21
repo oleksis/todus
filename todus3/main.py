@@ -11,8 +11,8 @@ from urllib.parse import quote_plus, unquote_plus
 import multivolumefile
 import py7zr
 
-from . import __app_name__, __version__
-from .client import ToDusClient
+from todus3 import __app_name__, __version__
+from todus3.client import ToDusClient
 
 formatter = logging.Formatter("%(levelname)s-%(name)s-%(asctime)s-%(message)s")
 logger = logging.getLogger(__name__)

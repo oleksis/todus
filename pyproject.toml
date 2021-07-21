@@ -2,7 +2,7 @@
 name = "todus3"
 homepage = "https://github.com/oleksis/todus/tree/todus3"
 repository = "https://github.com/oleksis/todus/tree/todus3"
-version = "0.5.4"
+version = "0.6.0"
 description = "ToDus client for S3"
 authors = ["adbenitez <adbenitez@nauta.cu>"]
 maintainers = ["Oleksis Fraga <oleksis.fraga@gmail.com>"]
@@ -38,6 +38,7 @@ flake8 = "^3.9.2"
 mypy = "^0.910"
 types-requests = "^2.25.0"
 pytest = "^6.2.4"
+pyinstaller = "^4.4"
 
 [tool.poetry.scripts]
 todus3 = 'todus3.main:main'
