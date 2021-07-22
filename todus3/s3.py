@@ -80,9 +80,10 @@ def reserve_url(token: str, filesize: int) -> Tuple[str, str]:
         if f"t='result' i='{sid}-1'>" in response:
             data = b"<en xmlns='x7' u='true' max='300'/>"
             ssl_socket.send(data)
+            # Data type voice
             data = (
                 f"<iq i='{sid}-3' t='get'>"
-                f"<query xmlns='todus:purl' type='0' persistent='false'"
+                f"<query xmlns='todus:purl' type='1' persistent='false'"
                 f" size='{filesize}' room=''></query>"
                 "</iq>"
             ).encode("utf-8")
