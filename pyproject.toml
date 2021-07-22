@@ -2,7 +2,7 @@
 name = "todus3"
 homepage = "https://github.com/oleksis/todus/tree/todus3"
 repository = "https://github.com/oleksis/todus/tree/todus3"
-version = "0.6.0"
+version = "0.6.1"
 description = "ToDus client for S3"
 authors = ["adbenitez <adbenitez@nauta.cu>"]
 maintainers = ["Oleksis Fraga <oleksis.fraga@gmail.com>"]
