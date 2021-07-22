@@ -26,14 +26,14 @@ classifiers = [
 ]
 
 [tool.poetry.dependencies]
-python = "^3.6.2"
+python = "^3.6"
 requests = "^2.25.1"
 py7zr = "^0.16.1"
 multivolumefile = "^0.2.3"
 tqdm = "^4.61.2"
 
 [tool.poetry.dev-dependencies]
-black = "^21.6b0"
+black = {version = "^21.6b0", python = ">3.6.2"}
 flake8 = "^3.9.2"
 mypy = "^0.910"
 types-requests = "^2.25.0"

@@ -15,27 +15,27 @@ all: format typecheck lint test
 
 .PHONY: lint
 lint:
-	flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
-	flake8 . --count --exit-zero --max-complexity=12 --max-line-length=127 --statistics
+	poetry run flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+	poetry run flake8 . --count --exit-zero --max-complexity=12 --max-line-length=127 --statistics
 
 format-check:
-	black --check .
+	poetry run black --check .
 
 .PHONY: format
 format:
-	black .
+	poetry run black .
 
 .PHONY: test
 test:
-	$(PY) -m pytest tests/ -vv
+	poetry run pytest tests/ -vv
 
 .PHONY: test-cov
 test-cov:
-	$(PY) -m pytest --cov-report term-missing --cov=todus3 tests/ -vv
+	poetry run pytest --cov-report term-missing --cov=todus3 tests/ -vv
 
 .PHONY: typecheck
 typecheck:
-	mypy -p todus3
+	poetry run mypy -p todus3
 
 .PHONY: clean
 clean: clean-build clean-pyc clean-test

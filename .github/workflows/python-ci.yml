@@ -45,13 +45,12 @@ jobs:
         poetry config virtualenvs.in-project true
         poetry install --no-interaction
     - name: Check code with black
-      run: poetry run black --check .
+      run: make format-check
     - name: Lint with flake8
       run: |
-        poetry run flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
-        poetry run flake8 . --count --exit-zero --max-complexity=12 --max-line-length=127 --statistics
+        make lint
     - name: Test with pytest
-      run: poetry run pytest -v
+      run: make test
   pyinstaller_publish:
     needs: [test]
     runs-on: windows-latest
@@ -100,7 +99,7 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         tag_name: ${{ github.ref }}
-        release_name: todus3
+        release_name: todus3 ${{ github.ref }}
         draft: false
         prerelease: false
     - name: Upload Executable todus3.exe
