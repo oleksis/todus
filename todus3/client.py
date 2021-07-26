@@ -1,51 +1,20 @@
 import logging
 import socket
 import string
+import time
 from pathlib import Path
-from queue import Empty, Queue
-from typing import Any, Callable, Dict, Optional, Tuple
+from typing import Dict, Tuple
 
 import requests
-from tqdm import tqdm
+from tqdm.auto import tqdm
 from tqdm.utils import CallbackIOWrapper
 
-from todus3.errors import AbortError
 from todus3.s3 import get_real_url, reserve_url
-from todus3.util import generate_token
+from todus3.util import generate_token, shorten_name
 
 DEFAULT_TIMEOUT = 60 * 2  # 2 minutes
 CHUNK_SIZE = 1024
 logger = logging.getLogger(__name__)
-
-
-class ResultProcess:
-    def __init__(self, target, *args, **kwargs) -> None:
-        self._real_target = target
-        self.args = args
-        self.kwargs = kwargs
-        self._result_queue: Queue = Queue()
-        self._failed = False
-
-    def start(self, *args, **kwargs) -> None:
-        try:
-            self._result_queue.put(self._real_target(*args, **kwargs))
-        except Exception as ex:
-            self._failed = True
-            self._result_queue.put(ex)
-
-    def abort(self) -> None:
-        self._failed = True
-        self._result_queue.put(AbortError())
-
-    def get_result(self, timeout: float = None):
-        result = None
-        try:
-            result = self._result_queue.get(timeout=timeout)
-        except Empty:
-            raise TimeoutError("Operation timed out.")
-        if self._failed:
-            raise result
-        return result
 
 
 class ToDusClient:
@@ -64,21 +33,9 @@ class ToDusClient:
                 "Accept-Encoding": "gzip",
             }
         )
-        self._process: Optional[ResultProcess] = None
-
-    def _run_task(self, task: Callable, timeout: float, *args, **kwargs) -> Any:
-        self._process = ResultProcess(task, *args, **kwargs)
-        try:
-            self._process.start(*args, **kwargs)
-            return self._process.get_result(timeout)
-        except Exception as ex:
-            logger.error(ex)
-            self.abort()
+        self.exit = False
 
     def abort(self) -> None:
-        if self._process is not None:
-            self._process.abort()
-            self._process = None
         self.session.close()
 
     @property
@@ -118,8 +75,7 @@ class ToDusClient:
 
     def request_code(self, phone_number: str) -> None:
         """Request server to send verification SMS code."""
-        args = (phone_number,)
-        self._run_task(self.task_request_code, self.timeout, *args)
+        self.task_request_code(phone_number)
 
     def task_validate_code(self, phone_number: str, code: str) -> str:
         headers = self.headers_auth
@@ -144,11 +100,7 @@ class ToDusClient:
 
         Returns the account password.
         """
-        args = (
-            phone_number,
-            code,
-        )
-        return self._run_task(self.task_validate_code, self.timeout, *args)
+        return self.task_validate_code(phone_number, code)
 
     def task_login(self, phone_number: str, password: str) -> str:
         token = ""
@@ -170,16 +122,11 @@ class ToDusClient:
             token = "".join(
                 c for c in resp.content.decode("latin-1") if c in string.printable
             )
-
         return token
 
     def login(self, phone_number: str, password: str) -> str:
         """Login with phone number and password to get an access token."""
-        args = (
-            phone_number,
-            password,
-        )
-        return self._run_task(self.task_login, self.timeout, *args)
+        return self.task_login(phone_number, password)
 
     def task_upload_file_1(self, token: str, size: int) -> Tuple[str, str]:
         return reserve_url(token, size)
@@ -225,16 +172,13 @@ class ToDusClient:
         """Upload data and return the download URL."""
         size = filename_path.stat().st_size if filename_path.exists() else 0
 
-        args = (
-            token,
-            size,
-        )
-        up_url, down_url = self._run_task(self.task_upload_file_1, self.timeout, *args)
+        up_url, down_url = self.task_upload_file_1(token, size)
 
         timeout = max(size / 1024 / 1024 * 20, self.timeout)
 
-        args_2 = (token, filename_path, up_url, down_url, timeout, index)
-        return self._run_task(self.task_upload_file_2, timeout, *args_2)
+        return self.task_upload_file_2(
+            token, filename_path, up_url, down_url, timeout, index
+        )
 
     def task_download_1(self, token: str, url: str) -> str:
         try:
@@ -261,35 +205,51 @@ class ToDusClient:
 
             overwrite = file_save.stat().st_size < size if file_save.exists() else True
             if overwrite:
-                print(f"{file_save.name}:")
-                with tqdm.wrapattr(
-                    open(file_save, "wb"),
-                    "write",
+                progress_bar = tqdm(
                     miniters=1,
                     total=size,
+                    desc=shorten_name(file_save.name),
                     unit="B",
                     unit_scale=True,
-                    unit_divisor=CHUNK_SIZE,
-                ) as fout:
+                )
+                with open(file_save, "wb") as file_stream:
                     for chunk in resp.iter_content(chunk_size=CHUNK_SIZE):
-                        fout.write(chunk)
+                        if self.exit:
+                            break
+                        progress_bar.update(len(chunk))
+                        file_stream.write(chunk)
+                progress_bar.close()
         return size
 
     def download_file(
-        self, token: str, url: str, filename_path: str, down_timeout: float = 60 * 20
+        self,
+        token: str,
+        url: str,
+        filename_path: str,
+        down_timeout: float = 60 * 20,
+        max_retry: int = 3,
     ) -> int:
         """Download file URL.
 
         Returns the file size.
         """
-        args = (
-            token,
-            url,
-        )
-        url = self._run_task(self.task_download_1, self.timeout, *args)
-        args_2 = (
-            token,
-            url,
-            filename_path,
-        )
-        return self._run_task(self.task_download_2, down_timeout, *args_2)
+        size = 0
+        retry = 0
+        down_done = False
+
+        while not down_done and retry < max_retry:
+            try:
+                url = self.task_download_1(token, url)
+                size = self.task_download_2(token, url, filename_path)
+            except Exception as ex:
+                logger.error(ex)
+
+            if size:
+                down_done = True
+
+            if not down_done or not size:
+                retry += 1
+                if retry == max_retry or self.exit:
+                    break
+                time.sleep(15)
+        return size

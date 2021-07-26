@@ -1,18 +1,23 @@
 import argparse
 import logging
 import os
+import sys
 import time
+from concurrent.futures import ThreadPoolExecutor
 from configparser import ConfigParser
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import List
+from threading import RLock as TRLock
+from typing import Any, Dict, List
 from urllib.parse import quote_plus, unquote_plus
 
 import multivolumefile
 import py7zr
+from tqdm.auto import tqdm
 
 from todus3 import __app_name__, __version__
 from todus3.client import ToDusClient
+from todus3.util import normalize_phone_number
 
 formatter = logging.Formatter("%(levelname)s-%(name)s-%(asctime)s-%(message)s")
 logger = logging.getLogger(__name__)
@@ -29,6 +34,8 @@ client = ToDusClient()
 config = ConfigParser()
 MAX_RETRY = 3
 DOWN_TIMEOUT = 60 * 20  # 20 MINS
+MAX_WORKERS = 3
+PY3_7 = sys.version_info[:2] >= (3, 7)
 
 
 def write_txt(filename: str, urls: List[str], parts: List[str]) -> str:
@@ -136,6 +143,14 @@ def get_parser() -> argparse.ArgumentParser:
     up_parser.add_argument("file", nargs="+", help="file to upload")
 
     down_parser = subparsers.add_parser(name="download", help="download file")
+    down_parser.add_argument(
+        "-t",
+        "--max-threads",
+        type=int,
+        default=MAX_WORKERS,
+        metavar="MAX-WORKERS",
+        help="Maximum number of concurrent downloads (Default: 3)",
+    )
     down_parser.add_argument("url", nargs="+", help="url to download or txt file path")
 
     return parser
@@ -186,13 +201,16 @@ def _upload(token: str, args: argparse.Namespace, max_retry: int):
 
 
 def _download(
-    token: str, args: argparse.Namespace, down_timeout: float, max_retry: int
+    token: str,
+    args: argparse.Namespace,
+    down_timeout: float,
+    max_retry: int,
+    max_workers: int = MAX_WORKERS,
 ):
     urls = []
+    download_tasks = {}
 
     while args.url:
-        retry = 0
-        down_done = False
         file_uri = args.url.pop(0)
 
         # Extract URLS from current TXT
@@ -210,35 +228,33 @@ def _download(
         if urls:
             count_files = len(urls)
             plural = "" if count_files <= 1 else "s"
-            logger.info(f"Downloading: {count_files} file{plural}")
+            logger.debug(f"Downloading: {count_files} file{plural}")
 
-        logger.info(
-            f"Downloading: {file_uri}",
-        )
+        logger.debug(f"Downloading: {file_uri}")
         file_uri, name = file_uri.split("?name=", maxsplit=1)
         name = unquote_plus(name)
-        size = 0
-
-        while not down_done and retry < max_retry:
-            try:
-                size = client.download_file(token, file_uri, name, down_timeout)
-            except Exception as ex:
-                logger.error(ex)
-
-            if size:
-                logger.debug(
-                    f"File: {name}, Size: {size // 1024}",
-                )
-                down_done = True
-
-            if not down_done or not size:
-                retry += 1
-                if retry == max_retry:
-                    break
-                logger.info(f"Retrying: {retry}...")
-                time.sleep(15)
-
+        download_tasks[name] = (
+            token,
+            file_uri,
+            name,
+            down_timeout,
+            max_retry,
+        )
         urls = []
+
+    tqdm.set_lock(TRLock())
+    pool_args: Dict[str, Any] = {}
+    if PY3_7:
+        pool_args.update(initializer=tqdm.set_lock, initargs=(tqdm.get_lock(),))
+
+    with ThreadPoolExecutor(max_workers=max_workers, **pool_args) as tpe:
+        try:
+            for v_args in download_tasks.values():
+                tpe.submit(client.download_file, *v_args)
+                time.sleep(3)  # Rate limit
+        except KeyboardInterrupt:
+            client.exit = True
+            client.session.close()
 
 
 def main() -> None:
@@ -247,7 +263,7 @@ def main() -> None:
     parser = get_parser()
     args = parser.parse_args()
     folder: str = args.folder
-    phone: str = f"535{args.number[-7:]}"  # Country Code + phone
+    phone: str = normalize_phone_number(args.number)
     password: str = get_default(str, "password", phone, folder, "")
     max_retry: int = get_default(int, "max_retry", phone, folder, str(MAX_RETRY))
     config["DEFAULT"]["max_retry"] = str(max_retry)
@@ -273,8 +289,9 @@ def main() -> None:
         _upload(token, args, max_retry)
     elif args.command == "download":
         token = client.login(phone, password)
+        max_workers: int = args.max_threads
         logger.debug(f"Token: '{token}'")
-        _download(token, args, down_timeout, max_retry)
+        _download(token, args, down_timeout, max_retry, max_workers)
     elif args.command == "login":
         password = register(client, phone)
         token = client.login(phone, password)
