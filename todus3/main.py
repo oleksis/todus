@@ -75,25 +75,10 @@ def split_upload(
         urls = []
 
         for i, name in enumerate(parts, 1):
-            retry = 0
-            up_done = False
-
             temp_path = Path(f"{tempdir}/{name}")
-            # TODO: Tranfer retry logic to the client
-            while not up_done and retry < max_retry:
-                try:
-                    urls.append(client.upload_file(token, temp_path, index=i))
-                except Exception as ex:
-                    logger.error(ex)
-                    retry += 1
-                    if retry == max_retry:
-                        raise ValueError(
-                            f"Failed to upload part {i} ({temp_path.stat().st_size:,}B): {ex}"
-                        )
-                    logger.info(f"Retrying: {retry}...")
-                    time.sleep(15)
-                else:
-                    up_done = True
+            _url = client.upload_file(token, temp_path, i, max_retry)
+            if _url:
+                urls.append(_url)
 
         path = write_txt(filename, urls, parts)
     return path
@@ -192,7 +177,6 @@ def _upload(token: str, args: argparse.Namespace, max_retry: int):
             txt = split_upload(token, path, args.part_size, max_retry=max_retry)
             logger.info(f"TXT: {txt}")
         else:
-            # TODO: Retry for single file
             filename_path = Path(path)
             file_uri = client.upload_file(token, filename_path)
             down_url = f"{file_uri}?name={quote_plus(filename)}"

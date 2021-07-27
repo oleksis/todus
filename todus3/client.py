@@ -10,7 +10,13 @@ from tqdm.auto import tqdm
 from tqdm.utils import CallbackIOWrapper
 
 from todus3.s3 import get_real_url, reserve_url
-from todus3.util import generate_token, shorten_name
+from todus3.util import (
+    decode_content,
+    generate_token,
+    raise_for_status,
+    shorten_name,
+    tqdm_logging,
+)
 
 DEFAULT_TIMEOUT = 60 * 2  # 2 minutes
 CHUNK_SIZE = 1024
@@ -71,13 +77,14 @@ class ToDusClient:
         )
         url = "https://auth.todus.cu/v2/auth/users.reserve"
         with self.session.post(url, data=data, headers=headers) as resp:
-            resp.raise_for_status()
+            raise_for_status(resp)
 
     def request_code(self, phone_number: str) -> None:
         """Request server to send verification SMS code."""
         self.task_request_code(phone_number)
 
     def task_validate_code(self, phone_number: str, code: str) -> str:
+        content = ""
         headers = self.headers_auth
         data = (
             b"\n\n"
@@ -89,11 +96,13 @@ class ToDusClient:
         )
         url = "https://auth.todus.cu/v2/auth/users.register"
         with self.session.post(url, data=data, headers=headers) as resp:
-            resp.raise_for_status()
+            raise_for_status(resp)
             if b"`" in resp.content:
                 index = resp.content.index(b"`") + 1
-                return resp.content[index : index + 96].decode()
-            return resp.content[5:166].decode()
+                content = decode_content(resp.content[index : index + 96])
+            else:
+                content = decode_content(resp.content[5:166])
+        return content
 
     def validate_code(self, phone_number: str, code: str) -> str:
         """Validate phone number with received SMS code.
@@ -117,11 +126,10 @@ class ToDusClient:
         )
         url = "https://auth.todus.cu/v2/auth/token"
         with self.session.post(url, data=data, headers=headers) as resp:
-            resp.raise_for_status()
+            raise_for_status(resp)
             # Default Encoding for HTML4 ISO-8859-1 (Latin-1)
-            token = "".join(
-                c for c in resp.content.decode("latin-1") if c in string.printable
-            )
+            content = decode_content(resp.content)
+            token = "".join(c for c in content if c in string.printable)
         return token
 
     def login(self, phone_number: str, password: str) -> str:
@@ -140,12 +148,13 @@ class ToDusClient:
         timeout: float,
         index: int,
     ) -> str:
+        size = filename_path.stat().st_size if filename_path.exists() else 0
+
         headers = {
             "User-Agent": self.upload_ua,
             "Authorization": f"Bearer {token}",
+            "Content-Length": str(size),
         }
-
-        size = filename_path.stat().st_size if filename_path.exists() else 0
 
         with tqdm(
             total=size,
@@ -162,26 +171,46 @@ class ToDusClient:
                 timeout=timeout,
                 stream=True,
             ) as resp:
-                resp.raise_for_status()
+                raise_for_status(resp)
         return down_url
 
-    def upload_file(self, token: str, filename_path: Path, index: int = 1) -> str:
+    def upload_file(
+        self, token: str, filename_path: Path, index: int = 1, max_retry: int = 3
+    ) -> str:
         """Upload data and return the download URL."""
         size = filename_path.stat().st_size if filename_path.exists() else 0
+        retry = 0
+        up_done = False
+        _down_url = ""
 
-        up_url, down_url = self.task_upload_file_1(token, size)
+        while not up_done and retry < max_retry:
+            try:
+                up_url, down_url = self.task_upload_file_1(token, size)
 
-        timeout = max(size / 1024 / 1024 * 20, self.timeout)
+                if not up_url:
+                    raise ValueError("Invalid URL 'None'")
 
-        return self.task_upload_file_2(
-            token, filename_path, up_url, down_url, timeout, index
-        )
+                timeout = max(size / 1024 / 1024 * 20, self.timeout)
+
+                _down_url = self.task_upload_file_2(
+                    token, filename_path, up_url, down_url, timeout, index
+                )
+            except Exception as ex:
+                tqdm_logging(logging.ERROR, str(ex))
+                retry += 1
+                if retry == max_retry:
+                    raise ValueError(f"Failed to upload part {index} ({size:,}B): {ex}")
+                tqdm_logging(logging.INFO, f"Retrying: {retry}...")
+                time.sleep(15)
+            else:
+                up_done = True
+        return _down_url
 
     def task_download_1(self, token: str, url: str) -> str:
         try:
             url = get_real_url(token, url)
         except socket.timeout as ex:
-            logger.error(ex)
+            tqdm_logging(logging.ERROR, str(ex))
         if not url:
             raise ValueError("Invalid URL 'None'")
         return url
@@ -194,7 +223,7 @@ class ToDusClient:
         size = 0
 
         with self.session.get(url=url, headers=headers, stream=True) as resp:
-            resp.raise_for_status()
+            raise_for_status(resp)
 
             size = int(resp.headers.get("content-length", 0))
 
@@ -239,7 +268,7 @@ class ToDusClient:
                 url = self.task_download_1(token, url)
                 size = self.task_download_2(token, url, filename_path)
             except Exception as ex:
-                logger.error(ex)
+                tqdm_logging(logging.ERROR, str(ex))
 
             if size:
                 down_done = True
