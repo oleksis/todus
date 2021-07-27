@@ -85,7 +85,7 @@ class ToDusClient:
             + b"\x12\x96\x01"
             + generate_token(150).encode("utf-8")
             + b"\x1a\x06"
-            + code.encode()
+            + code.encode("utf-8")
         )
         url = "https://auth.todus.cu/v2/auth/users.register"
         with self.session.post(url, data=data, headers=headers) as resp:
@@ -107,11 +107,11 @@ class ToDusClient:
         headers = self.headers_auth
         data = (
             b"\n\n"
-            + phone_number.encode()
+            + phone_number.encode("utf-8")
             + b"\x12\x96\x01"
             + generate_token(150).encode("utf-8")
             + b"\x12\x60"
-            + password.encode()
+            + password.encode("utf-8")
             + b"\x1a\x05"
             + self.version_code.encode("utf-8")
         )
@@ -149,12 +149,11 @@ class ToDusClient:
 
         with tqdm(
             total=size,
-            desc=f"Part {index}",
+            desc=f"#{index} {shorten_name(filename_path.name)}",
             unit="B",
             unit_scale=True,
             unit_divisor=CHUNK_SIZE,
-        ) as t:
-            fileobj = open(filename_path, "rb")
+        ) as t, open(filename_path, "rb") as fileobj:
             wrapped_file = CallbackIOWrapper(t.update, fileobj, "read")
             with self.session.put(
                 url=up_url,
@@ -164,8 +163,6 @@ class ToDusClient:
                 stream=True,
             ) as resp:
                 resp.raise_for_status()
-            if not fileobj.closed:
-                fileobj.close()
         return down_url
 
     def upload_file(self, token: str, filename_path: Path, index: int = 1) -> str:

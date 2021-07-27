@@ -56,7 +56,7 @@ def split_upload(
 
     filename = Path(path).name
 
-    logger.info("Compressing parts...")
+    logger.info("Compressing parts ...")
 
     with TemporaryDirectory() as tempdir:
         with multivolumefile.open(
@@ -70,15 +70,16 @@ def split_upload(
         parts = sorted(_file.name for _file in Path(tempdir).iterdir())
         parts_count = len(parts)
 
+        logger.info(f"Uploading {parts_count} parts ...")
+
         urls = []
 
         for i, name in enumerate(parts, 1):
             retry = 0
             up_done = False
-            logger.info(f"Uploading {i}/{parts_count}: {name}")
 
             temp_path = Path(f"{tempdir}/{name}")
-
+            # TODO: Tranfer retry logic to the client
             while not up_done and retry < max_retry:
                 try:
                     urls.append(client.upload_file(token, temp_path, index=i))
