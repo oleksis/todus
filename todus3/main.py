@@ -11,8 +11,12 @@ from threading import RLock as TRLock
 from typing import Any, Dict, List
 from urllib.parse import quote_plus, unquote_plus
 
-import multivolumefile
-import py7zr
+try:
+    import multivolumefile
+    import py7zr
+except ImportError:
+    multivolumefile = None
+    py7zr = None
 from tqdm.auto import tqdm
 
 from todus3 import __app_name__, __version__
@@ -59,7 +63,7 @@ def split_upload(
     logger.info("Compressing parts ...")
 
     with TemporaryDirectory() as tempdir:
-        with multivolumefile.open(
+        with multivolumefile.open(  # type: ignore
             Path(f"{tempdir}/{filename}.7z"),
             "wb",
             volume=part_size,
@@ -174,6 +178,11 @@ def _upload(token: str, args: argparse.Namespace, max_retry: int):
         filename = Path(path).name
         logger.info(f"Uploading: {filename}")
         if args.part_size:
+            if py7zr is None:
+                raise ImportError(
+                    "ModuleNotFoundError: No module named 'py7zr'\n"
+                    f"Install extra dependency like `pip install {__app_name__}[7z]`"
+                )
             txt = split_upload(token, path, args.part_size, max_retry=max_retry)
             logger.info(f"TXT: {txt}")
         else:
