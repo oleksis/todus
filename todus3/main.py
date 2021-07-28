@@ -251,13 +251,24 @@ def _download(
             client.session.close()
 
 
-def main() -> None:
+def main(action: str = "login", phone_number: str = "", folder_conf: str = ".") -> None:
+    """Main entrypoint adapted for Notebooks"""
     global client, config, logger
 
-    parser = get_parser()
-    args = parser.parse_args()
-    folder: str = args.folder
-    phone: str = normalize_phone_number(args.number)
+    folder: str = folder_conf
+    phone: str = ""
+    parser = None
+
+    if not phone_number:
+        parser = get_parser()
+        args = parser.parse_args()
+        folder = args.folder
+        phone = normalize_phone_number(args.number)
+        command = args.command
+    else:
+        phone = normalize_phone_number(str(phone_number))
+        command = action
+
     password: str = get_default(str, "password", phone, folder, "")
     max_retry: int = get_default(int, "max_retry", phone, folder, str(MAX_RETRY))
     config["DEFAULT"]["max_retry"] = str(max_retry)
@@ -273,20 +284,20 @@ def main() -> None:
     else:
         logger.setLevel(logging.DEBUG)
 
-    if not password and args.command != "login":
+    if not password and args.command != "login":  # type: ignore
         print("ERROR: account not authenticated, login first.")
         return
 
-    if args.command == "upload":
+    if command == "upload":
         token = client.login(phone, password)
         logger.debug(f"Token: '{token}'")
-        _upload(token, args, max_retry)
-    elif args.command == "download":
+        _upload(token, args, max_retry)  # type: ignore
+    elif command == "download":
         token = client.login(phone, password)
-        max_workers: int = args.max_threads
+        max_workers: int = args.max_threads  # type: ignore
         logger.debug(f"Token: '{token}'")
-        _download(token, args, down_timeout, max_retry, max_workers)
-    elif args.command == "login":
+        _download(token, args, down_timeout, max_retry, max_workers)  # type: ignore
+    elif command == "login":
         password = register(client, phone)
         token = client.login(phone, password)
         logger.debug(f"Token: '{token}'")
@@ -294,6 +305,9 @@ def main() -> None:
         config["DEFAULT"]["password"] = password
         config["DEFAULT"]["token"] = token
     else:
-        parser.print_usage()
+        if parser:
+            parser.print_usage()
+        else:
+            RuntimeError("Argument Error")
 
     save_config(phone, folder)
