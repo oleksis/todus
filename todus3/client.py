@@ -6,11 +6,15 @@ from pathlib import Path
 from typing import Dict, Tuple
 
 import requests
+from requests.exceptions import ConnectTimeout, ReadTimeout
 from tqdm.auto import tqdm
 from tqdm.utils import CallbackIOWrapper
 
+from todus3 import __app_name__
+from todus3.errors import AbortError
 from todus3.s3 import get_real_url, reserve_url
 from todus3.util import (
+    ErrorCode,
     decode_content,
     generate_token,
     raise_for_status,
@@ -18,9 +22,9 @@ from todus3.util import (
     tqdm_logging,
 )
 
-DEFAULT_TIMEOUT = 60 * 2  # 2 minutes
+DEFAULT_TIMEOUT: float = 30  # seconds
 CHUNK_SIZE = 1024
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(__app_name__)
 
 
 class ToDusClient:
@@ -40,6 +44,7 @@ class ToDusClient:
             }
         )
         self.exit = False
+        self.error_code = ErrorCode.SUCCESS
 
     def abort(self) -> None:
         self.session.close()
@@ -199,6 +204,7 @@ class ToDusClient:
                 tqdm_logging(logging.ERROR, str(ex))
                 retry += 1
                 if retry == max_retry:
+                    self.error_code = ErrorCode.CLIENT
                     raise ValueError(f"Failed to upload part {index} ({size:,}B): {ex}")
                 tqdm_logging(logging.INFO, f"Retrying: {retry}...")
                 time.sleep(15)
@@ -210,19 +216,30 @@ class ToDusClient:
         try:
             url = get_real_url(token, url)
         except socket.timeout as ex:
+            self.error_code = ErrorCode.CLIENT
             tqdm_logging(logging.ERROR, str(ex))
         if not url:
             raise ValueError("Invalid URL 'None'")
         return url
 
-    def task_download_2(self, token: str, url: str, filename_path: str) -> int:
+    def task_download_2(
+        self,
+        token: str,
+        url: str,
+        filename_path: str,
+        down_timeout: float = DEFAULT_TIMEOUT,
+    ) -> int:
         headers = {
             "User-Agent": self.download_ua,
             "Authorization": f"Bearer {token}",
         }
+        self.timeout = down_timeout
         size = 0
+        down_error = False
 
-        with self.session.get(url=url, headers=headers, stream=True) as resp:
+        with self.session.get(
+            url=url, headers=headers, timeout=self.timeout, stream=True
+        ) as resp:
             raise_for_status(resp)
 
             size = int(resp.headers.get("content-length", 0))
@@ -238,13 +255,24 @@ class ToDusClient:
                     unit="B",
                     unit_scale=True,
                 )
+                # TODO: Better handle slow connections :(
+                # For now we skip slow connections when reach the Timeout
+                # https://docs.python-requests.org/en/master/user/quickstart/#timeouts
                 with open(file_save, "wb") as file_stream:
-                    for chunk in resp.iter_content(chunk_size=CHUNK_SIZE):
-                        if self.exit:
-                            break
-                        progress_bar.update(len(chunk))
-                        file_stream.write(chunk)
+                    try:
+                        for chunk in resp.iter_content(chunk_size=CHUNK_SIZE):
+                            if self.exit:
+                                break
+                            progress_bar.update(len(chunk))
+                            file_stream.write(chunk)
+                    except (ConnectTimeout, ReadTimeout):
+                        down_error = True
+
                 progress_bar.close()
+                if self.exit:
+                    raise AbortError("Client has abruptly terminated.")
+                elif down_error:
+                    raise ReadTimeout(response=resp)
         return size
 
     def download_file(
@@ -252,7 +280,7 @@ class ToDusClient:
         token: str,
         url: str,
         filename_path: str,
-        down_timeout: float = 60 * 20,
+        down_timeout: float = DEFAULT_TIMEOUT,
         max_retry: int = 3,
     ) -> int:
         """Download file URL.
@@ -266,16 +294,16 @@ class ToDusClient:
         while not down_done and retry < max_retry:
             try:
                 url = self.task_download_1(token, url)
-                size = self.task_download_2(token, url, filename_path)
-            except Exception as ex:
+                size = self.task_download_2(token, url, filename_path, down_timeout)
+            except (AbortError, ReadTimeout) as ex:
+                self.error_code = ErrorCode.CLIENT
                 tqdm_logging(logging.ERROR, str(ex))
-
-            if size:
+            else:
                 down_done = True
 
             if not down_done or not size:
                 retry += 1
                 if retry == max_retry or self.exit:
                     break
-                time.sleep(15)
+                time.sleep(5)
         return size

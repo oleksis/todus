@@ -8,4 +8,4 @@ if __package__ is None and not hasattr(sys, "frozen"):
 
 from todus3.main import main
 
-main()
+sys.exit(main())

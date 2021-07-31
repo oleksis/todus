@@ -21,10 +21,10 @@ from tqdm.auto import tqdm
 
 from todus3 import __app_name__, __version__
 from todus3.client import ToDusClient
-from todus3.util import normalize_phone_number
+from todus3.util import ErrorCode, normalize_phone_number, tqdm_logging
 
 formatter = logging.Formatter("%(levelname)s-%(name)s-%(asctime)s-%(message)s")
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(__app_name__)
 logger.setLevel(logging.INFO)
 handler_default = logging.StreamHandler()
 handler_default.setFormatter(formatter)
@@ -37,7 +37,7 @@ logger.addHandler(handler_error)
 client = ToDusClient()
 config = ConfigParser()
 MAX_RETRY = 3
-DOWN_TIMEOUT = 60 * 20  # 20 MINS
+DOWN_TIMEOUT = 30  # seconds
 MAX_WORKERS = 3
 PY3_7 = sys.version_info[:2] >= (3, 7)
 
@@ -150,7 +150,7 @@ def register(client: ToDusClient, phone: str) -> str:
     client.request_code(phone)
     pin = input("Enter PIN:").strip()
     password = client.validate_code(phone, pin)
-    logger.debug("PASSWORD: %s", password)
+    tqdm_logging(logging.DEBUG, f"PASSWORD: {password}")
     return password
 
 
@@ -222,9 +222,9 @@ def _download(
         if urls:
             count_files = len(urls)
             plural = "" if count_files <= 1 else "s"
-            logger.debug(f"Downloading: {count_files} file{plural}")
+            tqdm_logging(logging.DEBUG, f"Downloading: {count_files} file{plural}")
 
-        logger.debug(f"Downloading: {file_uri}")
+        tqdm_logging(logging.DEBUG, f"Downloading: {file_uri}")
         file_uri, name = file_uri.split("?name=", maxsplit=1)
         name = unquote_plus(name)
         download_tasks[name] = (
@@ -251,13 +251,14 @@ def _download(
             client.session.close()
 
 
-def main(action: str = "login", phone_number: str = "", folder_conf: str = ".") -> None:
+def main(action: str = "login", phone_number: str = "", folder_conf: str = ".") -> int:
     """Main entrypoint adapted for Notebooks"""
     global client, config, logger
 
     folder: str = folder_conf
     phone: str = ""
     parser = None
+    error_code = ErrorCode.SUCCESS
 
     if not phone_number:
         parser = get_parser()
@@ -286,28 +287,29 @@ def main(action: str = "login", phone_number: str = "", folder_conf: str = ".") 
 
     if not password and args.command != "login":  # type: ignore
         print("ERROR: account not authenticated, login first.")
-        return
+        return ErrorCode.MAIN
 
     if command == "upload":
         token = client.login(phone, password)
-        logger.debug(f"Token: '{token}'")
+        tqdm_logging(logging.DEBUG, f"Token: '{token}'")
         _upload(token, args, max_retry)  # type: ignore
     elif command == "download":
         token = client.login(phone, password)
         max_workers: int = args.max_threads  # type: ignore
-        logger.debug(f"Token: '{token}'")
+        tqdm_logging(logging.DEBUG, f"Token: '{token}'")
         _download(token, args, down_timeout, max_retry, max_workers)  # type: ignore
     elif command == "login":
         password = register(client, phone)
         token = client.login(phone, password)
-        logger.debug(f"Token: '{token}'")
+        tqdm_logging(logging.DEBUG, f"Token: '{token}'")
 
         config["DEFAULT"]["password"] = password
         config["DEFAULT"]["token"] = token
+    elif parser:
+        parser.print_usage()
     else:
-        if parser:
-            parser.print_usage()
-        else:
-            RuntimeError("Argument Error")
+        raise RuntimeError("Argument Error")
 
+    error_code = client.error_code
     save_config(phone, folder)
+    return error_code

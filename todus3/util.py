@@ -2,16 +2,19 @@ import logging
 import random
 import re
 import string
+from enum import IntEnum
 from functools import wraps
 from typing import TYPE_CHECKING
 
 from requests.exceptions import HTTPError
 from tqdm.contrib.logging import logging_redirect_tqdm
 
+from todus3 import __app_name__
+
 if TYPE_CHECKING:
     from requests import Response
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(__app_name__)
 
 
 def generate_token(length: int) -> str:
@@ -84,3 +87,12 @@ def catch_exceptions_decorator(func):
             logger.error(ex)
 
     return wrapper
+
+
+class ErrorCode(IntEnum):
+    SUCCESS = 0
+    CLIENT = 1
+    MAIN = 2
+
+    def __str__(self) -> str:
+        return str(self.value)
