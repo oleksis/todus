@@ -8,7 +8,7 @@ from configparser import ConfigParser
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from threading import RLock as TRLock
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Union
 from urllib.parse import quote_plus, unquote_plus
 
 try:
@@ -51,7 +51,7 @@ def write_txt(filename: str, urls: List[str], parts: List[str]) -> str:
 
 
 def split_upload(
-    token: str, path: str, part_size: int, max_retry: int = MAX_RETRY
+    token: str, path: Union[str, Path], part_size: int, max_retry: int = MAX_RETRY
 ) -> str:
     global client
 
@@ -174,7 +174,24 @@ def get_default(dtype, dkey: str, phone: str, folder: str, dvalue: str = ""):
 
 
 def _upload(token: str, args: argparse.Namespace, max_retry: int):
-    for path in args.file:
+    """Upload files and files in directories"""
+    files: List[Union[str, Path]] = args.file
+    paths = list(
+        list(generator)
+        for generator in (
+            Path(_path).iterdir() for _path in files if Path(_path).is_dir()
+        )
+    )
+    # Flat List
+    if paths:
+        paths = [_path.resolve() for _path in paths[0] if paths[0]]
+    else:
+        paths = []
+
+    files = [Path(_path).resolve() for _path in files if Path(_path).is_file()]
+    all_paths: List[Union[str, Path]] = files + paths  # type: ignore
+
+    for path in all_paths:
         filename = Path(path).name
         logger.info(f"Uploading: {filename}")
         if args.part_size:
