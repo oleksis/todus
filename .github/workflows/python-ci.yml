@@ -43,7 +43,7 @@ jobs:
       if: steps.cache-deps.cache-hit != 'true'
       run: |
         poetry config virtualenvs.in-project true
-        poetry install --no-interaction
+        poetry install -E 7z --no-interaction
     - name: Check code with black
       run: make format-check
     - name: Lint with flake8
@@ -89,7 +89,7 @@ jobs:
       if: steps.cache-deps.cache-hit != 'true'
       run: |
         poetry config virtualenvs.in-project true
-        poetry install --no-interaction
+        poetry install -E 7z --no-interaction
     - name: Build BundleApp with PyInstaller
       run: poetry run python .\devscripts\pyinstaller.py
     - name: Create Release
