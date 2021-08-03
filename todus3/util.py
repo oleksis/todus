@@ -4,15 +4,10 @@ import re
 import string
 from enum import IntEnum
 from functools import wraps
-from typing import TYPE_CHECKING
 
-from requests.exceptions import HTTPError
 from tqdm.contrib.logging import logging_redirect_tqdm
 
 from todus3 import __app_name__
-
-if TYPE_CHECKING:
-    from requests import Response
 
 logger = logging.getLogger(__app_name__)
 
@@ -59,13 +54,6 @@ def tqdm_logging(level: int = logging.DEBUG, message: str = "") -> None:
             logger.info(message)
 
 
-def raise_for_status(response: "Response"):
-    try:
-        response.raise_for_status()
-    except HTTPError as ex:
-        tqdm_logging(logging.ERROR, str(ex))
-
-
 def normalize_phone_number(phone_number: str) -> str:
     """Normalize phone number with Cuba contry code"""
     phone_number = phone_number.replace(" ", "")
@@ -83,7 +71,7 @@ def catch_exceptions_decorator(func):
     def wrapper(*args, **kwargs):
         try:
             func(*args, **kwargs)
-        except (KeyboardInterrupt, Exception) as ex:
+        except Exception as ex:
             logger.error(ex)
 
     return wrapper

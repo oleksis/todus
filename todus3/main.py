@@ -23,6 +23,7 @@ from todus3 import __app_name__, __version__
 from todus3.client import ToDusClient
 from todus3.util import ErrorCode, normalize_phone_number, tqdm_logging
 
+
 formatter = logging.Formatter("%(levelname)s-%(name)s-%(asctime)s-%(message)s")
 logger = logging.getLogger(__app_name__)
 logger.setLevel(logging.INFO)
@@ -34,7 +35,6 @@ handler_error.setFormatter(formatter)
 logger.addHandler(handler_default)
 logger.addHandler(handler_error)
 
-client = ToDusClient()
 config = ConfigParser()
 MAX_RETRY = 3
 DOWN_TIMEOUT = 30  # seconds
@@ -51,9 +51,12 @@ def write_txt(filename: str, urls: List[str], parts: List[str]) -> str:
 
 
 def split_upload(
-    token: str, path: Union[str, Path], part_size: int, max_retry: int = MAX_RETRY
+    client: ToDusClient,
+    token: str,
+    path: Union[str, Path],
+    part_size: int,
+    max_retry: int = MAX_RETRY,
 ) -> str:
-    global client
 
     with open(path, "rb") as file:
         data = file.read()
@@ -83,6 +86,7 @@ def split_upload(
             _url = client.upload_file(token, temp_path, i, max_retry)
             if _url:
                 urls.append(_url)
+            time.sleep(5)
 
         path = write_txt(filename, urls, parts)
     return path
@@ -130,7 +134,7 @@ def get_parser() -> argparse.ArgumentParser:
         default=0,
         help="if given, the file will be split in parts of the given size in bytes",
     )
-    up_parser.add_argument("file", nargs="+", help="file to upload")
+    up_parser.add_argument("file", nargs="+", help="file or directory to upload")
 
     down_parser = subparsers.add_parser(name="download", help="download file")
     down_parser.add_argument(
@@ -173,7 +177,7 @@ def get_default(dtype, dkey: str, phone: str, folder: str, dvalue: str = ""):
     )
 
 
-def _upload(token: str, args: argparse.Namespace, max_retry: int):
+def _upload(client: ToDusClient, token: str, args: argparse.Namespace, max_retry: int):
     """Upload files and files in directories"""
     files: List[Union[str, Path]] = args.file
     paths = list(
@@ -183,13 +187,12 @@ def _upload(token: str, args: argparse.Namespace, max_retry: int):
         )
     )
     # Flat List
-    if paths:
-        paths = [_path.resolve() for _path in paths[0] if paths[0]]
-    else:
-        paths = []
+    paths_list: List[Path] = (
+        [_path.resolve() for _path in paths[0] if paths[0]] if paths else []
+    )
 
     files = [Path(_path).resolve() for _path in files if Path(_path).is_file()]
-    all_paths: List[Union[str, Path]] = files + paths  # type: ignore
+    all_paths: List[Union[str, Path]] = files + paths_list  # type: ignore
 
     for path in all_paths:
         filename = Path(path).name
@@ -200,7 +203,7 @@ def _upload(token: str, args: argparse.Namespace, max_retry: int):
                     "ModuleNotFoundError: No module named 'py7zr'\n"
                     f"Install extra dependency like `pip install {__app_name__}[7z]`"
                 )
-            txt = split_upload(token, path, args.part_size, max_retry=max_retry)
+            txt = split_upload(client, token, path, args.part_size, max_retry=max_retry)
             logger.info(f"TXT: {txt}")
         else:
             filename_path = Path(path)
@@ -212,6 +215,7 @@ def _upload(token: str, args: argparse.Namespace, max_retry: int):
 
 
 def _download(
+    client: ToDusClient,
     token: str,
     args: argparse.Namespace,
     down_timeout: float,
@@ -268,9 +272,17 @@ def _download(
             client.session.close()
 
 
-def main(action: str = "login", phone_number: str = "", folder_conf: str = ".") -> int:
+def main(
+    client: ToDusClient = None,
+    action: str = "login",
+    phone_number: str = "",
+    folder_conf: str = ".",
+) -> int:
     """Main entrypoint adapted for Notebooks"""
-    global client, config, logger
+    global config, logger
+
+    if not client:
+        client = ToDusClient()
 
     folder: str = folder_conf
     phone: str = ""
@@ -309,12 +321,12 @@ def main(action: str = "login", phone_number: str = "", folder_conf: str = ".") 
     if command == "upload":
         token = client.login(phone, password)
         tqdm_logging(logging.DEBUG, f"Token: '{token}'")
-        _upload(token, args, max_retry)  # type: ignore
+        _upload(client, token, args, max_retry)  # type: ignore
     elif command == "download":
         token = client.login(phone, password)
         max_workers: int = args.max_threads  # type: ignore
         tqdm_logging(logging.DEBUG, f"Token: '{token}'")
-        _download(token, args, down_timeout, max_retry, max_workers)  # type: ignore
+        _download(client, token, args, down_timeout, max_retry, max_workers)  # type: ignore
     elif command == "login":
         password = register(client, phone)
         token = client.login(phone, password)

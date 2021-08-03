@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Dict, Tuple
 
 import requests
-from requests.exceptions import ConnectTimeout, ReadTimeout
+from requests.exceptions import ConnectionError, ConnectTimeout, HTTPError, ReadTimeout
 from tqdm.auto import tqdm
 from tqdm.utils import CallbackIOWrapper
 
@@ -17,7 +17,6 @@ from todus3.util import (
     ErrorCode,
     decode_content,
     generate_token,
-    raise_for_status,
     shorten_name,
     tqdm_logging,
 )
@@ -82,7 +81,7 @@ class ToDusClient:
         )
         url = "https://auth.todus.cu/v2/auth/users.reserve"
         with self.session.post(url, data=data, headers=headers) as resp:
-            raise_for_status(resp)
+            resp.raise_for_status()
 
     def request_code(self, phone_number: str) -> None:
         """Request server to send verification SMS code."""
@@ -101,7 +100,7 @@ class ToDusClient:
         )
         url = "https://auth.todus.cu/v2/auth/users.register"
         with self.session.post(url, data=data, headers=headers) as resp:
-            raise_for_status(resp)
+            resp.raise_for_status()
             if b"`" in resp.content:
                 index = resp.content.index(b"`") + 1
                 content = decode_content(resp.content[index : index + 96])
@@ -131,7 +130,7 @@ class ToDusClient:
         )
         url = "https://auth.todus.cu/v2/auth/token"
         with self.session.post(url, data=data, headers=headers) as resp:
-            raise_for_status(resp)
+            resp.raise_for_status()
             # Default Encoding for HTML4 ISO-8859-1 (Latin-1)
             content = decode_content(resp.content)
             token = "".join(c for c in content if c in string.printable)
@@ -176,7 +175,7 @@ class ToDusClient:
                 timeout=timeout,
                 stream=True,
             ) as resp:
-                raise_for_status(resp)
+                resp.raise_for_status()
         return down_url
 
     def upload_file(
@@ -193,31 +192,35 @@ class ToDusClient:
                 up_url, down_url = self.task_upload_file_1(token, size)
 
                 if not up_url:
-                    raise ValueError("Invalid URL 'None'")
+                    raise ValueError("Upload URL could not be obtained.")
 
                 timeout = max(size / 1024 / 1024 * 20, self.timeout)
 
                 _down_url = self.task_upload_file_2(
                     token, filename_path, up_url, down_url, timeout, index
                 )
-            except Exception as ex:
+            except (
+                AbortError,
+                ConnectionError,
+                HTTPError,
+                ReadTimeout,
+                socket.timeout,
+                socket.gaierror,
+                ValueError,
+            ) as ex:
                 tqdm_logging(logging.ERROR, str(ex))
                 retry += 1
                 if retry == max_retry:
                     self.error_code = ErrorCode.CLIENT
                     raise ValueError(f"Failed to upload part {index} ({size:,}B): {ex}")
                 tqdm_logging(logging.INFO, f"Retrying: {retry}...")
-                time.sleep(15)
+                time.sleep(5)
             else:
                 up_done = True
         return _down_url
 
     def task_download_1(self, token: str, url: str) -> str:
-        try:
-            url = get_real_url(token, url)
-        except socket.timeout as ex:
-            self.error_code = ErrorCode.CLIENT
-            tqdm_logging(logging.ERROR, str(ex))
+        url = get_real_url(token, url)
         if not url:
             raise ValueError("Invalid URL 'None'")
         return url
@@ -240,7 +243,7 @@ class ToDusClient:
         with self.session.get(
             url=url, headers=headers, timeout=self.timeout, stream=True
         ) as resp:
-            raise_for_status(resp)
+            resp.raise_for_status()
 
             size = int(resp.headers.get("content-length", 0))
 
@@ -265,14 +268,21 @@ class ToDusClient:
                                 break
                             progress_bar.update(len(chunk))
                             file_stream.write(chunk)
-                    except (ConnectTimeout, ReadTimeout):
+                    except (
+                        ConnectionError,
+                        ConnectTimeout,
+                        HTTPError,
+                        ReadTimeout,
+                        socket.timeout,
+                        socket.gaierror,
+                    ):
                         down_error = True
 
                 progress_bar.close()
                 if self.exit:
                     raise AbortError("Client has abruptly terminated.")
                 elif down_error:
-                    raise ReadTimeout(response=resp)
+                    raise ReadTimeout("Error during download process.", response=resp)
         return size
 
     def download_file(
@@ -295,7 +305,14 @@ class ToDusClient:
             try:
                 url = self.task_download_1(token, url)
                 size = self.task_download_2(token, url, filename_path, down_timeout)
-            except (AbortError, ReadTimeout) as ex:
+            except (
+                AbortError,
+                HTTPError,
+                ReadTimeout,
+                socket.timeout,
+                socket.gaierror,
+                ValueError,
+            ) as ex:
                 self.error_code = ErrorCode.CLIENT
                 tqdm_logging(logging.ERROR, str(ex))
             else:
