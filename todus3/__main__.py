@@ -6,9 +6,9 @@ if __package__ is None and not hasattr(sys, "frozen"):
     PATH = Path(__file__).resolve().parent
     sys.path.insert(0, str(PATH))
 
+from todus3 import ErrorCode
 from todus3.client import ToDusClient
 from todus3.main import main
-from todus3.util import ErrorCode
 
 
 client = ToDusClient()

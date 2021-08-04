@@ -10,16 +10,10 @@ from requests.exceptions import ConnectionError, ConnectTimeout, HTTPError, Read
 from tqdm.auto import tqdm
 from tqdm.utils import CallbackIOWrapper
 
-from todus3 import __app_name__
+from todus3 import ErrorCode, __app_name__
 from todus3.errors import AbortError
 from todus3.s3 import get_real_url, reserve_url
-from todus3.util import (
-    ErrorCode,
-    decode_content,
-    generate_token,
-    shorten_name,
-    tqdm_logging,
-)
+from todus3.util import decode_content, generate_token, shorten_name, tqdm_logging
 
 DEFAULT_TIMEOUT: float = 30  # seconds
 CHUNK_SIZE = 1024
@@ -210,10 +204,15 @@ class ToDusClient:
             ) as ex:
                 tqdm_logging(logging.ERROR, str(ex))
                 retry += 1
+                tqdm_logging(logging.INFO, f"Retrying: {retry}...")
                 if retry == max_retry:
                     self.error_code = ErrorCode.CLIENT
-                    raise ValueError(f"Failed to upload part {index} ({size:,}B): {ex}")
-                tqdm_logging(logging.INFO, f"Retrying: {retry}...")
+                    tqdm_logging(
+                        logging.ERROR,
+                        f"Failed to upload part {index} ({size:,} Bytes): {ex}",
+                    )
+                    self.exit = True
+                    break
                 time.sleep(5)
             else:
                 up_done = True
@@ -262,27 +261,12 @@ class ToDusClient:
                 # For now we skip slow connections when reach the Timeout
                 # https://docs.python-requests.org/en/master/user/quickstart/#timeouts
                 with open(file_save, "wb") as file_stream:
-                    try:
-                        for chunk in resp.iter_content(chunk_size=CHUNK_SIZE):
-                            if self.exit:
-                                break
-                            progress_bar.update(len(chunk))
-                            file_stream.write(chunk)
-                    except (
-                        ConnectionError,
-                        ConnectTimeout,
-                        HTTPError,
-                        ReadTimeout,
-                        socket.timeout,
-                        socket.gaierror,
-                    ):
-                        down_error = True
-
+                    for chunk in resp.iter_content(chunk_size=CHUNK_SIZE):
+                        if self.exit:
+                            break
+                        progress_bar.update(len(chunk))
+                        file_stream.write(chunk)
                 progress_bar.close()
-                if self.exit:
-                    raise AbortError("Client has abruptly terminated.")
-                elif down_error:
-                    raise ReadTimeout("Error during download process.", response=resp)
         return size
 
     def download_file(
@@ -306,8 +290,10 @@ class ToDusClient:
                 url = self.task_download_1(token, url)
                 size = self.task_download_2(token, url, filename_path, down_timeout)
             except (
-                AbortError,
+                IOError,
                 HTTPError,
+                ConnectTimeout,
+                ConnectionError,
                 ReadTimeout,
                 socket.timeout,
                 socket.gaierror,

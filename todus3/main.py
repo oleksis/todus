@@ -19,10 +19,9 @@ except ImportError:
     py7zr = None
 from tqdm.auto import tqdm
 
-from todus3 import __app_name__, __version__
+from todus3 import ErrorCode, __app_name__, __version__
 from todus3.client import ToDusClient
-from todus3.util import ErrorCode, normalize_phone_number, tqdm_logging
-
+from todus3.util import normalize_phone_number, tqdm_logging
 
 formatter = logging.Formatter("%(levelname)s-%(name)s-%(asctime)s-%(message)s")
 logger = logging.getLogger(__app_name__)
@@ -246,7 +245,13 @@ def _download(
             tqdm_logging(logging.DEBUG, f"Downloading: {count_files} file{plural}")
 
         tqdm_logging(logging.DEBUG, f"Downloading: {file_uri}")
-        file_uri, name = file_uri.split("?name=", maxsplit=1)
+
+        name = ""
+        if "?name=" in file_uri:
+            file_uri, name = file_uri.split("?name=", maxsplit=1)
+        else:
+            raise FileNotFoundError(f"File {file_uri} not found!")
+
         name = unquote_plus(name)
         download_tasks[name] = (
             token,

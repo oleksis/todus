@@ -2,7 +2,6 @@ import logging
 import random
 import re
 import string
-from enum import IntEnum
 from functools import wraps
 
 from tqdm.contrib.logging import logging_redirect_tqdm
@@ -75,12 +74,3 @@ def catch_exceptions_decorator(func):
             logger.error(ex)
 
     return wrapper
-
-
-class ErrorCode(IntEnum):
-    SUCCESS = 0
-    CLIENT = 1
-    MAIN = 2
-
-    def __str__(self) -> str:
-        return str(self.value)
