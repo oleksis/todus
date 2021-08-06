@@ -206,7 +206,7 @@ def _upload(client: ToDusClient, token: str, args: argparse.Namespace, max_retry
             logger.info(f"TXT: {txt}")
         else:
             filename_path = Path(path)
-            file_uri = client.upload_file(token, filename_path)
+            file_uri = client.upload_file(token, filename_path, max_retry=max_retry)
             down_url = f"{file_uri}?name={quote_plus(filename)}"
             logger.info(f"URL: {down_url}")
             txt = write_txt(filename, urls=[file_uri], parts=[filename])
