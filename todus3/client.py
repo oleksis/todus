@@ -17,6 +17,7 @@ from todus3.util import decode_content, generate_token, shorten_name, tqdm_loggi
 
 DEFAULT_TIMEOUT: float = 30  # seconds
 CHUNK_SIZE = 1024
+AUTH_ENDPOINT = "https://auth.todus.cu/v2/auth"
 logger = logging.getLogger(__app_name__)
 
 
@@ -73,7 +74,7 @@ class ToDusClient:
             + b"\x12\x96\x01"
             + generate_token(150).encode("utf-8")
         )
-        url = "https://auth.todus.cu/v2/auth/users.reserve"
+        url = f"{AUTH_ENDPOINT}/users.reserve"
         with self.session.post(
             url, data=data, headers=headers, timeout=DEFAULT_TIMEOUT
         ) as resp:
@@ -94,7 +95,7 @@ class ToDusClient:
             + b"\x1a\x06"
             + code.encode("utf-8")
         )
-        url = "https://auth.todus.cu/v2/auth/users.register"
+        url = f"{AUTH_ENDPOINT}/users.register"
         with self.session.post(
             url, data=data, headers=headers, timeout=DEFAULT_TIMEOUT
         ) as resp:
@@ -126,7 +127,7 @@ class ToDusClient:
             + b"\x1a\x05"
             + self.version_code.encode("utf-8")
         )
-        url = "https://auth.todus.cu/v2/auth/token"
+        url = f"{AUTH_ENDPOINT}/token"
         with self.session.post(
             url, data=data, headers=headers, timeout=DEFAULT_TIMEOUT
         ) as resp:

@@ -9,13 +9,14 @@ from todus3.errors import AuthenticationError, EndOfStreamError
 from todus3.util import generate_token
 
 _BUFFERSIZE = 1024 * 1024
+HOST_IM = "im.todus.cu"
 
 
 def _get_socket() -> ssl.SSLSocket:
     socket_ = socket.socket(socket.AF_INET)
     socket_.settimeout(15)
     ssl_socket = ssl.wrap_socket(socket_, ssl_version=ssl.PROTOCOL_TLSv1_2)
-    ssl_socket.connect(("im.todus.cu", 1756))
+    ssl_socket.connect((f"{HOST_IM}", 1756))
     ssl_socket.send(
         b"<stream:stream xmlns='jc' o='im.todus.cu' xmlns:stream='x1' v='1.0'>"
     )
