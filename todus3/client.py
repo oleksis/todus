@@ -74,7 +74,9 @@ class ToDusClient:
             + generate_token(150).encode("utf-8")
         )
         url = "https://auth.todus.cu/v2/auth/users.reserve"
-        with self.session.post(url, data=data, headers=headers) as resp:
+        with self.session.post(
+            url, data=data, headers=headers, timeout=DEFAULT_TIMEOUT
+        ) as resp:
             resp.raise_for_status()
 
     def request_code(self, phone_number: str) -> None:
@@ -93,7 +95,9 @@ class ToDusClient:
             + code.encode("utf-8")
         )
         url = "https://auth.todus.cu/v2/auth/users.register"
-        with self.session.post(url, data=data, headers=headers) as resp:
+        with self.session.post(
+            url, data=data, headers=headers, timeout=DEFAULT_TIMEOUT
+        ) as resp:
             resp.raise_for_status()
             if b"`" in resp.content:
                 index = resp.content.index(b"`") + 1
@@ -123,7 +127,9 @@ class ToDusClient:
             + self.version_code.encode("utf-8")
         )
         url = "https://auth.todus.cu/v2/auth/token"
-        with self.session.post(url, data=data, headers=headers) as resp:
+        with self.session.post(
+            url, data=data, headers=headers, timeout=DEFAULT_TIMEOUT
+        ) as resp:
             resp.raise_for_status()
             # Default Encoding for HTML4 ISO-8859-1 (Latin-1)
             content = decode_content(resp.content)
