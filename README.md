@@ -39,5 +39,31 @@ todus3 -n 53123456 download -t 3 file.txt [file.txt ...]
 todus3 -n 53123456 upload binary.bin -p 10485760
 ```
 
+## Configuration
+
+When using `todus3` the configuration file (.ini) is created with the `DEFAULT` section and the following keys with values:
+
+```
+[DEFAULT]
+max_retry = 3  # Maximum number of times to repeat if an error occurs
+down_timeout = 30.0  # Maximum time in seconds to reach time out
+production = True
+password = PASSWORD  # Password established when sending the registration code
+token = TOKEN  # Token that is used in the authentication for uploading or downloading files
+```
+
+## ⚠ Advice
+
+The following is recommended for uploading or downloading the file:
+
+If your speed (download/upload) is equal to 70 KB/s in 120 seconds (ToDus limit) you can upload up to approximately 8 MB
+
+* P (Part of the file in MB)
+* Vd (Average download speed in KB/s)
+
+```
+P = Vd * 120 / 1024
+```
+
 ## Contributing
 Follow the [dev branch](https://github.com/oleksis/todus/tree/todus3) and [Feedbacks](https://github.com/oleksis/todus/issues) or [Pull Requests](https://github.com/oleksis/todus/pulls) are welcome 🙏🏾
