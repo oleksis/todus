@@ -2,7 +2,7 @@ from enum import IntEnum
 
 
 __app_name__ = "todus3"
-__version__ = "0.9.0"
+__version__ = "0.9.1"
 
 
 class ErrorCode(IntEnum):

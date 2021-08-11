@@ -244,7 +244,6 @@ class ToDusClient:
         }
         self.timeout = down_timeout
         size = 0
-        down_error = False
 
         with self.session.get(
             url=url, headers=headers, timeout=self.timeout, stream=True
@@ -306,14 +305,14 @@ class ToDusClient:
                 socket.gaierror,
                 ValueError,
             ) as ex:
-                self.error_code = ErrorCode.CLIENT
                 tqdm_logging(logging.ERROR, str(ex))
-            else:
-                down_done = True
-
-            if not down_done or not size:
                 retry += 1
-                if retry == max_retry or self.exit:
+                tqdm_logging(logging.DEBUG, f"Retrying: {retry}...")
+                if retry == max_retry:
+                    self.error_code = ErrorCode.CLIENT
+                    self.exit = True
                     break
                 time.sleep(5)
+            else:
+                down_done = True
         return size
