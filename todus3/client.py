@@ -308,8 +308,9 @@ class ToDusClient:
                 tqdm_logging(logging.ERROR, str(ex))
                 retry += 1
                 tqdm_logging(logging.DEBUG, f"Retrying: {retry}...")
+                self.error_code = ErrorCode.CLIENT
+                # TODO: Fix Retry when raise Exception using ThreadPoolExecutor
                 if retry == max_retry:
-                    self.error_code = ErrorCode.CLIENT
                     self.exit = True
                     break
                 time.sleep(5)
