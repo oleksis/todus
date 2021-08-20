@@ -26,6 +26,7 @@ poetry.lock
 
 .idea
 .vscode
+.vs
 *.spec
 *.egg-info
 
