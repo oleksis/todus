@@ -10,6 +10,7 @@ from tempfile import TemporaryDirectory
 from threading import RLock as TRLock
 from typing import Any, Dict, List, Union
 from urllib.parse import quote_plus, unquote_plus
+import subprocess
 
 try:
     import multivolumefile
@@ -68,6 +69,7 @@ def write_txt(filename: str, urls: List[str], parts: List[str]) -> str:
     return str(path)
 
 
+
 def split_upload(
     client: ToDusClient,
     token: str,
@@ -109,6 +111,65 @@ def split_upload(
 
         path = write_txt(filename, urls, parts)
     return path
+
+def upload_parts(
+        client: ToDusClient,
+        token: str,
+        parts_dir: Union[str, Path],
+        filename: str,
+        max_retry: int
+        ):
+    """
+        Subir las partes que esten en una carpeta determinada, con este metodo separado se pueden implemantar variantes para picar el fichero.
+    """
+    uploaded = read_txt(filename)
+    parts = sorted(_file.name for _file in Path(parts_dir).iterdir())
+    parts_count = len(parts)
+
+    logger.info(f"Uploading {parts_count} parts ...")
+
+    urls = []
+
+    for i, name in enumerate(parts, 1):
+        if not name in uploaded:
+            temp_path = Path(f"{parts_dir}/{name}")
+            _url = client.upload_file(token, temp_path, i, max_retry)
+            if _url:
+                urls.append(_url)
+            time.sleep(5)
+
+    path = write_txt(filename, urls, parts)
+    return path
+
+def split_upload_cat(
+    client: ToDusClient,
+    token: str,
+    path: Union[str, Path],
+    part_size: int,
+    max_retry: int = MAX_RETRY,
+) -> str:
+    """
+        Picar las partes usando el comando cat de linux
+    """      
+
+    path=None
+    filename = Path(path).name
+
+    parts_dir=f"parts/{filename}"
+    Path(parts_dir).mkdir(parents=True, exist_ok=True)
+
+    logger.info(f"Split parts in {parts_dir} ...")
+    cmd=f"split -b {part_size} {path} {parts_dir}/{filename}_"
+    completedProc = subprocess.run(cmd)
+
+
+    if completedProc.returncode == 0:
+        path = upload_parts(client,token,parts_dir,filename,max_retry)
+    else:
+        logger.error(f"Error to execute comand: {cmd}")
+
+    return path
+
 
 
 def get_parser() -> argparse.ArgumentParser:
