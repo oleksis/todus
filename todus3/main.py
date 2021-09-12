@@ -81,8 +81,6 @@ def split_upload(
 
     filename = Path(path).name
     uploaded = read_txt(filename)
-    logger.info(f"uploaded parts {uploaded}")
-
     logger.info("Compressing parts ...")
 
     with TemporaryDirectory() as tempdir:
