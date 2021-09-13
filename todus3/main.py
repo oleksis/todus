@@ -40,8 +40,7 @@ MAX_RETRY = 3
 DOWN_TIMEOUT = 30  # seconds
 MAX_WORKERS = 3
 PY3_7 = sys.version_info[:2] >= (3, 7)
-
-
+SPLIT_TYPE = "7z"
 
 
 def read_txt(filename: str) -> List[str]:
@@ -152,25 +151,22 @@ def split_upload_cat(
         Picar las partes usando el comando cat de linux
     """      
 
-    path=None
     filename = Path(path).name
 
     parts_dir=f"parts/{filename}"
     Path(parts_dir).mkdir(parents=True, exist_ok=True)
+    parts_dir=Path(parts_dir).resolve()
 
     logger.info(f"Split parts in {parts_dir} ...")
     cmd=f"split -b {part_size} {path} {parts_dir}/{filename}_"
-    completedProc = subprocess.run(cmd)
+    return_code = os.system(cmd)  
 
-
-    if completedProc.returncode == 0:
+    if return_code == 0:
         path = upload_parts(client,token,parts_dir,filename,max_retry)
     else:
         logger.error(f"Error to execute comand: {cmd}")
 
     return path
-
-
 
 def get_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
@@ -283,7 +279,11 @@ def _upload(client: ToDusClient, token: str, args: argparse.Namespace, max_retry
                     "ModuleNotFoundError: No module named 'py7zr'\n"
                     f"Install extra dependency like `pip install {__app_name__}[7z]`"
                 )
-            txt = split_upload(client, token, path, args.part_size, max_retry=max_retry)
+
+            if config["DEFAULT"]["split_type"] == 'cat':
+                txt = split_upload_cat(client, token, path, args.part_size, max_retry=max_retry)
+            else:                         
+                txt = split_upload(client, token, path, args.part_size, max_retry=max_retry)
             logger.info(f"TXT: {txt}")
         else:
             filename_path = Path(path)
@@ -394,6 +394,11 @@ def main(
     config["DEFAULT"]["down_timeout"] = str(down_timeout)
     production: bool = get_default(bool, "production", phone, folder, "True")
     config["DEFAULT"]["production"] = str(production)
+
+    split_type: str = get_default(str, "split_type", phone, folder, SPLIT_TYPE)
+    config["DEFAULT"]["split_type"] = split_type
+
+
 
     if production:
         logging.raiseExceptions = False

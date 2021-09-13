@@ -13,7 +13,9 @@ __pycache__
 *.msi
 
 todus/
-
+assets_tests/
+parts/
+configs/
 dist/
 build/
 env/
