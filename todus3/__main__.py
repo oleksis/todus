@@ -12,9 +12,12 @@ from todus3.main import main
 
 
 client = ToDusClient()
+exit_code = int(ErrorCode.SUCCESS)
 
 try:
     exit_code = main(client)
+except RuntimeError as err:
+    print(err)
 except KeyboardInterrupt:
     client.exit = True
     client.error_code = ErrorCode.MAIN

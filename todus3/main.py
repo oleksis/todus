@@ -8,7 +8,7 @@ from configparser import ConfigParser
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from threading import RLock as TRLock
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, List, Optional, Union
 from urllib.parse import quote_plus, unquote_plus
 
 try:
@@ -25,7 +25,7 @@ from todus3.util import normalize_phone_number, tqdm_logging
 
 formatter = logging.Formatter("%(levelname)s-%(name)s-%(asctime)s-%(message)s")
 logger = logging.getLogger(__app_name__)
-logger.setLevel(logging.INFO)
+logger.setLevel(logging.DEBUG)
 handler_default = logging.StreamHandler()
 handler_default.setFormatter(formatter)
 handler_error = logging.FileHandler("logs", encoding="utf-8")
@@ -124,6 +124,11 @@ def get_parser() -> argparse.ArgumentParser:
 
     _ = subparsers.add_parser(name="login", help="authenticate in server")
 
+    token_arg = ("-k", "--token")
+    token_kwarg = dict(
+        dest="token", default="", help="use this token for download/upload"
+    )
+
     up_parser = subparsers.add_parser(name="upload", help="upload file")
     up_parser.add_argument(
         "-p",
@@ -134,6 +139,7 @@ def get_parser() -> argparse.ArgumentParser:
         help="if given, the file will be split in parts of the given size in bytes",
     )
     up_parser.add_argument("file", nargs="+", help="file or directory to upload")
+    up_parser.add_argument(*token_arg, **token_kwarg)  # type: ignore[arg-type]
 
     down_parser = subparsers.add_parser(name="download", help="download file")
     down_parser.add_argument(
@@ -144,6 +150,7 @@ def get_parser() -> argparse.ArgumentParser:
         metavar="MAX-WORKERS",
         help="Maximum number of concurrent downloads (Default: 3)",
     )
+    down_parser.add_argument(*token_arg, **token_kwarg)  # type: ignore[arg-type]
     down_parser.add_argument("url", nargs="+", help="url to download or txt file path")
 
     return parser
@@ -153,6 +160,8 @@ def register(client: ToDusClient, phone: str) -> str:
     client.request_code(phone)
     pin = input("Enter PIN:").strip()
     password = client.validate_code(phone, pin)
+    if not password:
+        raise RuntimeError("Invalid PIN")
     tqdm_logging(logging.DEBUG, f"PASSWORD: {password}")
     return password
 
@@ -291,6 +300,7 @@ def main(
 
     folder: str = folder_conf
     phone: str = ""
+    token: Optional[str] = None
     parser = None
     error_code = ErrorCode.SUCCESS
 
@@ -300,6 +310,7 @@ def main(
         folder = args.folder
         phone = normalize_phone_number(args.number)
         command = args.command
+        token = args.token
     else:
         phone = normalize_phone_number(str(phone_number))
         command = action
@@ -324,11 +335,13 @@ def main(
         return ErrorCode.MAIN
 
     if command == "upload":
-        token = client.login(phone, password)
+        if not token:
+            token = client.login(phone, password)
         tqdm_logging(logging.DEBUG, f"Token: '{token}'")
         _upload(client, token, args, max_retry)  # type: ignore
     elif command == "download":
-        token = client.login(phone, password)
+        if not token:
+            token = client.login(phone, password)
         max_workers: int = args.max_threads  # type: ignore
         tqdm_logging(logging.DEBUG, f"Token: '{token}'")
         _download(client, token, args, down_timeout, max_retry, max_workers)  # type: ignore

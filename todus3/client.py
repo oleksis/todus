@@ -13,7 +13,13 @@ from tqdm.utils import CallbackIOWrapper
 from todus3 import ErrorCode, __app_name__
 from todus3.errors import AbortError
 from todus3.s3 import get_real_url, reserve_url
-from todus3.util import decode_content, generate_token, shorten_name, tqdm_logging
+from todus3.util import (
+    catch_exceptions_decorator,
+    decode_content,
+    generate_token,
+    shorten_name,
+    tqdm_logging,
+)
 
 DEFAULT_TIMEOUT: float = 30  # seconds
 CHUNK_SIZE = 1024
@@ -84,6 +90,7 @@ class ToDusClient:
         """Request server to send verification SMS code."""
         self.task_request_code(phone_number)
 
+    @catch_exceptions_decorator
     def task_validate_code(self, phone_number: str, code: str) -> str:
         content = ""
         headers = self.headers_auth
