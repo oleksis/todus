@@ -1,0 +1,9 @@
+version: '3.5'
+
+services:
+  app:
+    build: .
+    image: todus3
+    command: tail -f /etc/hosts
+    volumes:
+      - .:/var/app

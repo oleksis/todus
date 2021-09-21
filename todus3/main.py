@@ -10,6 +10,7 @@ from tempfile import TemporaryDirectory
 from threading import RLock as TRLock
 from typing import Any, Dict, List, Optional, Union
 from urllib.parse import quote_plus, unquote_plus
+import subprocess
 
 try:
     import multivolumefile
@@ -39,14 +40,33 @@ MAX_RETRY = 3
 DOWN_TIMEOUT = 30  # seconds
 MAX_WORKERS = 3
 PY3_7 = sys.version_info[:2] >= (3, 7)
+SPLIT_TYPE = "7z"
+
+
+def read_txt(filename: str) -> List[str]:
+    path = Path(f"{filename}.txt").resolve()
+    urls = []
+    names=[]
+    if os.path.exists(path):
+        with open(path) as fp:
+            for line in fp.readlines():
+                line = line.strip()
+                if line:
+                    _url, _filename = line.split(maxsplit=1)
+                    urls.append(_url)
+                    names.append(_filename)
+
+    return names
 
 
 def write_txt(filename: str, urls: List[str], parts: List[str]) -> str:
     txt = "\n".join(f"{down_url}\t{name}" for down_url, name in zip(urls, parts))
     path = Path(f"{filename}.txt").resolve()
-    with open(path, "w", encoding="utf-8") as f:
+    path.touch() 
+    with open(path, "a", encoding="utf-8") as f:
         f.write(txt)
     return str(path)
+
 
 
 def split_upload(
@@ -61,7 +81,7 @@ def split_upload(
         data = file.read()
 
     filename = Path(path).name
-
+    uploaded = read_txt(filename)
     logger.info("Compressing parts ...")
 
     with TemporaryDirectory() as tempdir:
@@ -81,15 +101,72 @@ def split_upload(
         urls = []
 
         for i, name in enumerate(parts, 1):
-            temp_path = Path(f"{tempdir}/{name}")
+            if not name in uploaded:
+                temp_path = Path(f"{tempdir}/{name}")
+                _url = client.upload_file(token, temp_path, i, max_retry)
+                if _url:
+                    urls.append(_url)
+                time.sleep(5)
+
+        path = write_txt(filename, urls, parts)
+    return path
+
+def upload_parts(
+        client: ToDusClient,
+        token: str,
+        parts_dir: Union[str, Path],
+        filename: str,
+        max_retry: int
+        ):
+    """
+        Subir las partes que esten en una carpeta determinada, con este metodo separado se pueden implemantar variantes para picar el fichero.
+    """
+    uploaded = read_txt(filename)
+    parts = sorted(_file.name for _file in Path(parts_dir).iterdir())
+    parts_count = len(parts)
+
+    logger.info(f"Uploading {parts_count} parts ...")
+
+    urls = []
+
+    for i, name in enumerate(parts, 1):
+        if not name in uploaded:
+            temp_path = Path(f"{parts_dir}/{name}")
             _url = client.upload_file(token, temp_path, i, max_retry)
             if _url:
                 urls.append(_url)
             time.sleep(5)
 
-        path = write_txt(filename, urls, parts)
+    path = write_txt(filename, urls, parts)
     return path
 
+def split_upload_cat(
+    client: ToDusClient,
+    token: str,
+    path: Union[str, Path],
+    part_size: int,
+    max_retry: int = MAX_RETRY,
+) -> str:
+    """
+        Picar las partes usando el comando cat de linux
+    """      
+
+    filename = Path(path).name
+
+    parts_dir=f"parts/{filename}"
+    Path(parts_dir).mkdir(parents=True, exist_ok=True)
+    parts_dir=Path(parts_dir).resolve()
+
+    logger.info(f"Split parts in {parts_dir} ...")
+    cmd=f"split -b {part_size} {path} {parts_dir}/{filename}_"
+    return_code = os.system(cmd)  
+
+    if return_code == 0:
+        path = upload_parts(client,token,parts_dir,filename,max_retry)
+    else:
+        logger.error(f"Error to execute comand: {cmd}")
+
+    return path
 
 def get_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
@@ -211,7 +288,11 @@ def _upload(client: ToDusClient, token: str, args: argparse.Namespace, max_retry
                     "ModuleNotFoundError: No module named 'py7zr'\n"
                     f"Install extra dependency like `pip install {__app_name__}[7z]`"
                 )
-            txt = split_upload(client, token, path, args.part_size, max_retry=max_retry)
+
+            if config["DEFAULT"]["split_type"] == 'cat':
+                txt = split_upload_cat(client, token, path, args.part_size, max_retry=max_retry)
+            else:                         
+                txt = split_upload(client, token, path, args.part_size, max_retry=max_retry)
             logger.info(f"TXT: {txt}")
         else:
             filename_path = Path(path)
@@ -324,6 +405,11 @@ def main(
     config["DEFAULT"]["down_timeout"] = str(down_timeout)
     production: bool = get_default(bool, "production", phone, folder, "True")
     config["DEFAULT"]["production"] = str(production)
+
+    split_type: str = get_default(str, "split_type", phone, folder, SPLIT_TYPE)
+    config["DEFAULT"]["split_type"] = split_type
+
+
 
     if production:
         logging.raiseExceptions = False

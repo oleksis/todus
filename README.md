@@ -65,5 +65,39 @@ If your speed (download/upload) is equal to 70 KB/s in 120 seconds (ToDus limit)
 P = Vd * 120 / 1024
 ```
 
+## Developmet 
+For execute app in development mode you need install [poetry](https://python-poetry.org/) or use [Docker](## Docker)
+Install dependencies 
+```shell
+poetry config virtualenvs.create false && poetry install --no-interaction --no-ansi
+```
+
+Run app with *poetry run*, for example:
+```shell
+poetry run todus3 -n 58963247 login
+```
+
+## Docker
+### Previous requirements
+* [Install Docker](https://docs.docker.com/engine/install/) in your system
+* [Install Docker Compose](https://docs.docker.com/compose/install/) in your system
+
+### Use for development
+Build image
+```shell
+docker-compose build
+```
+
+Run image
+```shell
+docker-compose up -d
+```
+
+Run command in container
+```shell
+docker-compose exec app bash
+```
+
+
 ## Contributing
 Follow the [dev branch](https://github.com/oleksis/todus/tree/todus3) and [Feedbacks](https://github.com/oleksis/todus/issues) or [Pull Requests](https://github.com/oleksis/todus/pulls) are welcome 🙏🏾
