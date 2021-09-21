@@ -41,10 +41,29 @@ MAX_WORKERS = 3
 PY3_7 = sys.version_info[:2] >= (3, 7)
 
 
+
+
+def read_txt(filename: str) -> List[str]:
+    path = Path(f"{filename}.txt").resolve()
+    urls = []
+    names=[]
+    if os.path.exists(path):
+        with open(path) as fp:
+            for line in fp.readlines():
+                line = line.strip()
+                if line:
+                    _url, _filename = line.split(maxsplit=1)
+                    urls.append(_url)
+                    names.append(_filename)
+
+    return names
+
+
 def write_txt(filename: str, urls: List[str], parts: List[str]) -> str:
     txt = "\n".join(f"{down_url}\t{name}" for down_url, name in zip(urls, parts))
     path = Path(f"{filename}.txt").resolve()
-    with open(path, "w", encoding="utf-8") as f:
+    path.touch() 
+    with open(path, "a", encoding="utf-8") as f:
         f.write(txt)
     return str(path)
 
@@ -61,7 +80,7 @@ def split_upload(
         data = file.read()
 
     filename = Path(path).name
-
+    uploaded = read_txt(filename)
     logger.info("Compressing parts ...")
 
     with TemporaryDirectory() as tempdir:
@@ -81,11 +100,12 @@ def split_upload(
         urls = []
 
         for i, name in enumerate(parts, 1):
-            temp_path = Path(f"{tempdir}/{name}")
-            _url = client.upload_file(token, temp_path, i, max_retry)
-            if _url:
-                urls.append(_url)
-            time.sleep(5)
+            if not name in uploaded:
+                temp_path = Path(f"{tempdir}/{name}")
+                _url = client.upload_file(token, temp_path, i, max_retry)
+                if _url:
+                    urls.append(_url)
+                time.sleep(5)
 
         path = write_txt(filename, urls, parts)
     return path
